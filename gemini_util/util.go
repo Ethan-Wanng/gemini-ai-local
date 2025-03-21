@@ -18,16 +18,15 @@ type IUtil interface {
 type Util struct{}
 
 // Encrypt AES 加密并转换为 Base64 编码
-func (u Util) Encrypt() (string, error) {
+func (u Util) Encrypt(plaintext string) (string, error) {
 	envMap := configuration.EnvMap
-	key := []byte(envMap["KEY"]) // AES 密钥
-	block, err := aes.NewCipher(key)
+	aesKey := []byte(envMap["KEY"]) // AES 密钥
+	block, err := aes.NewCipher(aesKey)
 	if err != nil {
 		return "", err
 	}
 
-	//plaintext := []byte(fileName)
-	paddedPlaintext := pkcs7Pad([]byte("Artsoar Wang"), aes.BlockSize)
+	paddedPlaintext := pkcs7Pad([]byte(plaintext), aes.BlockSize)
 
 	ciphertext := make([]byte, aes.BlockSize+len(paddedPlaintext))
 	iv := ciphertext[:aes.BlockSize]

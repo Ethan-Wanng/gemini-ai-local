@@ -238,7 +238,7 @@ async function sendMessage(isReply) {
                         return;
                     }
                     fileBase64s.push({
-                        mime_type: mimeType,
+                        mimeType: mimeType,
                         data: result.split(',')[1] // 去掉前缀部分
                     });
                     resolve();
@@ -325,7 +325,7 @@ function createConversationContainer(userMessage, fileBase64s = []) {
         fileBase64s.forEach(file => {
             const container = document.createElement("div");
             container.className = "file-container";
-            fileUI(container, file, file.mime_type);
+            fileUI(container, file, file.mimeType);
             filesContainer.appendChild(container);
         });
 
@@ -380,7 +380,7 @@ function editMessage(messageElement, originalText, originalFiles = []) {
                 fileContainer.remove();
             };
 
-            fileUI(fileContainer, file, file.mime_type);
+            fileUI(fileContainer, file, file.mimeType);
             fileContainer.appendChild(deleteBtn);
             filePreview.appendChild(fileContainer);
         });
@@ -412,8 +412,8 @@ function editMessage(messageElement, originalText, originalFiles = []) {
         // Add existing files that are already in base64 format
         if (originalFiles && originalFiles.length > 0) {
             originalFiles.forEach(file => {
-                const blob = base64ToBlob(file.data, file.mime_type);
-                const existingFile = new File([blob], `file.${file.mime_type.split('/')[1]}`, {type: file.mime_type});
+                const blob = base64ToBlob(file.data, file.mimeType);
+                const existingFile = new File([blob], `file.${file.mimeType.split('/')[1]}`, {type: file.mimeType});
                 dt.items.add(existingFile);
             });
         }
@@ -421,8 +421,8 @@ function editMessage(messageElement, originalText, originalFiles = []) {
         // Add new files from file input
         if (newFiles.length > 0) {
             newFiles.forEach(file => {
-                const blob = base64ToBlob(file.data, file.mime_type);
-                const newFile = new File([blob], `file.${file.mime_type.split('/')[1]}`, {type: file.mime_type});
+                const blob = base64ToBlob(file.data, file.mimeType);
+                const newFile = new File([blob], `file.${file.mimeType.split('/')[1]}`, {type: file.mimeType});
                 dt.items.add(newFile);
             });
         }
@@ -485,7 +485,7 @@ function updateMessage(messageElement, newText, newFiles) {
         newFiles.forEach(file => {
             const container = document.createElement("div");
             container.className = "file-container";
-            fileUI(container, file, file.mime_type);
+            fileUI(container, file, file.mimeType);
             filesContainer.appendChild(container);
         });
 
@@ -505,7 +505,7 @@ async function handleFileInput(fileInput) {
         });
 
         fileBase64s.push({
-            mime_type: file.type,
+            mimeType: file.type,
             data: base64.split(',')[1]
         });
     }
@@ -610,6 +610,9 @@ async function handleNewSession(userMessage, sessionId) {
 
     if (!titleResponse.ok) {
         console.error(`Title API error: ${titleResponse.status}`);
+        // Use first 40 characters of userMessage as title
+        document.getElementById("conversation-title").textContent = userMessage.slice(0, 40);
+        document.getElementById("conversation-title").style.whiteSpace = "nowrap";
         return;
     }
 
@@ -867,10 +870,10 @@ async function updateChatUI(id, historyData) {
                     editButton.className = "edit-message-btn";
                     editButton.innerHTML = '<i class="fas fa-edit"></i>';
 
-                    // 收集所有的 inline_data
+                    // 收集所有的 inlineData
                     content.parts.forEach(p => {
-                        if (p.inline_data) {
-                            inlineDataArray.push(p.inline_data);
+                        if (p.inlineData) {
+                            inlineDataArray.push(p.inlineData);
                         }
                     });
 
@@ -880,10 +883,10 @@ async function updateChatUI(id, historyData) {
                     lastUserMessage = part.text;
                     flag = true;
                 }
-                if (part.inline_data) {
+                if (part.inlineData) {
                     const container = document.createElement("div");
                     container.className = "file-container";
-                    fileUI(container, part.inline_data, part.inline_data.mime_type);
+                    fileUI(container, part.inlineData, part.inlineData.mimeType);
                     messageElement.appendChild(container);
                 }
             });
@@ -898,37 +901,11 @@ async function updateChatUI(id, historyData) {
                     messageElement.innerHTML += marked.parse(part.text);
                     aiMessageElementOnCopy.textContent += part.text;
                 }
-                if (part.inline_data) {
-                    const imgContainer = document.createElement("div");
-                    imgContainer.className = "image-thumbnail-container";
-
-                    const img = document.createElement("img");
-                    img.src = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
-                    img.className = "image-thumbnail";
-                    img.style.maxWidth = "200px";
-                    img.style.maxHeight = "200px";
-                    img.style.cursor = "pointer";
-
-                    img.onclick = () => {
-                        const fullImg = window.open("", "_blank");
-                        fullImg.document.write(`
-                            <html lang="en">
-                                <head>
-                                    <title>Full Size Image</title>
-                                    <style>
-                                        body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #000; }
-                                        img { max-width: 100%; max-height: 100vh; object-fit: contain; }
-                                    </style>
-                                </head>
-                                <body>
-                                    <img src="${img.src}" alt="">
-                                </body>
-                            </html>
-                        `);
-                    };
-
-                    imgContainer.appendChild(img);
-                    messageElement.appendChild(imgContainer);
+                if (part.inlineData) {
+                    const container = document.createElement("div");
+                    container.className = "file-container";
+                    fileUI(container, part.inlineData, part.inlineData.mimeType);
+                    messageElement.appendChild(container);
                 }
             });
 

@@ -7,6 +7,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,7 @@ var (
 	DB                 *sql.DB
 	DefaultModelInt    = "gemini-2.0-flash"
 	HttpState          = 200
+	GeminiApiKey       = ""
 )
 
 var CustomMIMEs = map[string]struct{}{
@@ -58,15 +60,15 @@ var CustomMIMEs = map[string]struct{}{
 }
 
 type UserInput struct {
-	Message   string          `json:"message,omitempty"`
-	SessionID int             `json:"session_id"`
-	Files     []InlineDataDto `json:"files,omitempty"`
-	ContentID *int            `json:"content_id,omitempty"`
-	IsReply   bool            `json:"is_reply,omitempty"`
+	Message   string           `json:"message,omitempty"`
+	SessionID int              `json:"session_id"`
+	Files     []*InlineDataDto `json:"files,omitempty"`
+	ContentID *int             `json:"content_id,omitempty"`
+	IsReply   bool             `json:"is_reply,omitempty"`
 }
 
 type InlineDataDto struct {
-	MimeType string `json:"mime_type"`
+	MimeType string `json:"mimeType"`
 	Data     []byte `json:"data"`
 }
 
@@ -167,12 +169,15 @@ func InitHistoryDir() error {
 
 // BuildAIApi 构建AI接口
 func BuildAIApi(DefaultModel, ContentType string) string {
-	GeminiApiKey := EnvMap["GEMINI_API_KEY"]
+	if GeminiApiKey == "" {
+		GeminiApiKey = EnvMap["GEMINI_API_KEY"]
+	}
 	GeminiBaseURL := EnvMap["BASE_GOOGLE_AI"]
 	modelMap := map[string]string{
 		"gemini-1.5-flash":              EnvMap["GEMINI_MODEL_1.5"],
 		"gemini-1.5-pro":                EnvMap["GEMINI_MODEL_1.5_PRO"],
 		"gemini-2.0-flash":              EnvMap["GEMINI_MODEL_2.0"],
+		"gemini-2.0-flash-exp":          EnvMap["GEMINI_MODEL_2_EXP"],
 		"gemini-2.0-flash-thinking-exp": EnvMap["GEMINI_MODEL_2.0_Thinking"],
 		"gemini-2.0-pro":                EnvMap["GEMINI_MODEL_2.0_PRO"],
 		"gemini-exp-1206":               EnvMap["GEMINI_MODEL_1206"],
@@ -189,8 +194,10 @@ func BuildAIApi(DefaultModel, ContentType string) string {
 		}
 	}
 
-	if ContentType == "" {
+	if ContentType == "" && DefaultModelInt != EnvMap["GEMINI_MODEL_2_EXP"] {
 		ContentType = EnvMap["CONTENT_TYPE_STEAM"]
+	} else if DefaultModelInt == EnvMap["GEMINI_MODEL_2_EXP"] {
+		ContentType = EnvMap["CONTENT_TYPE_JSON"]
 	}
 
 	return fmt.Sprintf("%s%s:%skey=%s", GeminiBaseURL, DefaultModel, ContentType, GeminiApiKey)
@@ -231,4 +238,42 @@ func VerifyGoogleAccess() error {
 		return fmt.Errorf("Gemini API not initialized")
 	}
 	return nil
+}
+
+// GetKey 检查history目录中是否存在example后缀的文件，如果有检查是否有存在gemini-key前缀的文本，然后提取文本，将这个文本赋值GeminiApiKey
+func GetKey() bool {
+	entries, err := os.ReadDir(historyDirName)
+	if err != nil {
+		return false
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && len(entry.Name()) > 8 && entry.Name()[len(entry.Name())-8:] == ".example" {
+			content, err := os.ReadFile(fmt.Sprintf("%s/%s", historyDirName, entry.Name()))
+			if err != nil {
+				continue
+			}
+
+			text := string(content)
+			const prefix = "gemini-key:"
+			if idx := strings.Index(text, prefix); idx != -1 {
+				// Extract the key value after the prefix
+				keyStart := idx + len(prefix)
+				keyEnd := strings.IndexAny(text[keyStart:], "\r\n")
+				if keyEnd == -1 {
+					keyEnd = len(text)
+				} else {
+					keyEnd += keyStart
+				}
+
+				key := strings.TrimSpace(text[keyStart:keyEnd])
+				if key != "" {
+					GeminiApiKey = key
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }

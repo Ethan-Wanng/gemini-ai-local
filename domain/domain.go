@@ -12,16 +12,17 @@ import (
 )
 
 type RequestBody struct {
-	Contents []*Content `json:"contents"`
+	Contents         []*Content `json:"contents"`
+	GenerationConfig any        `json:"generation_config"`
 }
 
 type Part struct {
 	Text       string      `json:"text,omitempty"`
-	InlineData *InlineData `json:"inline_data,omitempty"`
+	InlineData *InlineData `json:"inlineData,omitempty"`
 }
 
 type InlineData struct {
-	MimeType string `json:"mime_type"`
+	MimeType string `json:"mimeType"`
 	Data     []byte `json:"data"`
 }
 
@@ -33,15 +34,21 @@ type Content struct {
 
 type GeminiResponse struct {
 	Candidates []struct {
-		Content      Content
-		FinishReason string  `json:"finishReason"`
-		AvgLogprobs  float64 `json:"avgLogprobs"`
+		Content      *Content
+		FinishReason *string  `json:"finishReason,omitempty"`
+		AvgLogprobs  *float64 `json:"avgLogprobs,omitempty"`
+		Index        *int     `json:"index,omitempty"`
 	} `json:"candidates"`
 	UsageMetadata struct {
-		PromptTokenCount     int `json:"promptTokenCount"`
-		CandidatesTokenCount int `json:"candidatesTokenCount"`
-		TotalTokenCount      int `json:"totalTokenCount"`
-	} `json:"usageMetadata"`
+		PromptTokensDetails []*struct {
+			Modality   string `json:"modality"`
+			TokenCount int    `json:"tokenCount"`
+		} `json:"promptTokensDetails,omitempty"`
+
+		PromptTokenCount     *int `json:"promptTokenCount,omitempty"`
+		CandidatesTokenCount *int `json:"candidatesTokenCount,omitempty"`
+		TotalTokenCount      *int `json:"totalTokenCount,omitempty"`
+	} `json:"usageMetadata,omitempty"`
 	ModelVersion string `json:"modelVersion"`
 }
 
@@ -76,6 +83,9 @@ func (r *RequestBody) prepareRequestBody(input configuration.UserInput) ([]byte,
 		r.Contents = append(r.Contents, &content)
 	}
 
+	if configuration.DefaultModelInt == configuration.EnvMap["GEMINI_MODEL_2_EXP"] {
+		r.GenerationConfig = map[string]interface{}{"response_modalities": []string{"Text", "Image"}}
+	}
 	body, err := json.Marshal(r)
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling request body: %v", err)
@@ -91,27 +101,16 @@ func (r *RequestBody) sendRequest(body []byte) (*http.Response, error) {
 	//} else {
 	//	log.Printf("Request body:\n%s", prettyJSON.String())
 	//}
-	req, err := http.NewRequest("POST", configuration.AIApi, bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", configuration.BuildAIApi(configuration.DefaultModelInt, ""), bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
+	//fmt.Println(configuration.AIApi)
 	req.Header.Set("Content-Type", "application/json")
 	// 添加 API Key 到请求头
 	req.Header.Set("x-goog-api-key", configuration.AIApi)
 
-	// 发送请求
-	//resp, err := configuration.HttpClientWithPort.Do(req)
-	//if err != nil {
-	//	return nil, fmt.Errorf("error sending request: %v", err)
-	//}
-	//// 检查响应状态码
-	//if resp.StatusCode != http.StatusOK {
-	//	configuration.HttpState = resp.StatusCode
-	//	body, _ := io.ReadAll(resp.Body)
-	//	log.Println(string(body))
-	//	return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	//}
 	// 尝试使用当前客户端发送请求
 	if configuration.CurrentClient == nil {
 		configuration.CurrentClient = configuration.HttpClientWithPort
@@ -205,19 +204,13 @@ func (r *RequestBody) handleSSEResponse(w http.ResponseWriter, resp *http.Respon
 	return nil
 }
 
-// 处理 JSON 响应
-func (r *RequestBody) handleJSONResponse(w http.ResponseWriter, resp *http.Response) error {
+// 处理 JSON 响应 (改进版)
+func (r *RequestBody) handleJSONResponse(w http.ResponseWriter, resp *http.Response) (*GeminiResponse, error) {
+	// 2. 解析 JSON
 	var geminiResponse GeminiResponse
-	err := json.NewDecoder(resp.Body).Decode(&geminiResponse)
-	if err != nil {
-		return fmt.Errorf("error decoding JSON response: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&geminiResponse); err != nil {
+		return nil, fmt.Errorf("error decoding JSON response: %v", err)
 	}
-
-	// 处理 JSON 数据，例如返回整个响应体或部分内容
-	for _, candidate := range geminiResponse.Candidates {
-		for _, part := range candidate.Content.Parts {
-			_, _ = fmt.Fprint(w, fmt.Sprint(part.Text))
-		}
-	}
-	return nil
+	w.Write([]byte{})
+	return &geminiResponse, nil
 }

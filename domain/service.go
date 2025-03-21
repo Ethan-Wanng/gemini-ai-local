@@ -135,32 +135,17 @@ func GetSessionTitle(input configuration.UserInput) (*Title, error) {
 	} else {
 		// 请求AI生成标题
 		input.Message = input.Message + "\n，请根据这段文字帮我起一个标题，不超过26个字符，直接给出一个，不要添加任何信息，后面不要加换行"
-		resp, err := PostRequestOnClient(input)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get title from AI: %w", err)
-		}
-		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected HTTP status: %d", resp.StatusCode)
-		}
-
-		if resp.Body == nil {
-			return nil, fmt.Errorf("response body is empty")
-		}
-
-		var geminiResponse GeminiResponse
-		if err := json.NewDecoder(resp.Body).Decode(&geminiResponse); err != nil {
-			return nil, fmt.Errorf("error decoding JSON response: %w", err)
-		}
-
-		// 获取生成的标题文本
-		for _, candidate := range geminiResponse.Candidates {
-			for _, part := range candidate.Content.Parts {
-				title.Text = part.Text
-				break // 只取第一个部分的文本
+		var str *string
+		for range 3 {
+			str, err = getTitle(input)
+			if err != nil {
+				return nil, err
 			}
-			break // 只取第一个候选项
+			if str != nil {
+				title.Text = *str
+				break
+			}
 		}
 	}
 
@@ -171,6 +156,43 @@ func GetSessionTitle(input configuration.UserInput) (*Title, error) {
 	}
 
 	return title, nil
+}
+
+func getTitle(input configuration.UserInput) (*string, error) {
+	resp, err := PostRequestOnClient(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get title from AI: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected HTTP status: %d", resp.StatusCode)
+	}
+
+	if resp.Body == nil {
+		return nil, fmt.Errorf("response body is empty")
+	}
+
+	var geminiResponse GeminiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&geminiResponse); err != nil {
+		return nil, fmt.Errorf("error decoding JSON response: %w", err)
+	}
+
+	var str string
+	// 获取生成的标题文本
+	for _, candidate := range geminiResponse.Candidates {
+		if candidate.Content == nil || candidate.Content.Parts == nil {
+			continue
+		}
+		for _, part := range candidate.Content.Parts {
+			if part.Text == "" {
+				continue
+			}
+			str = part.Text
+		}
+		break // 只取第一个候选项
+	}
+	return &str, nil
 }
 
 // Chat 对话
@@ -220,8 +242,15 @@ func Chat(input configuration.UserInput, db *sql.DB, w http.ResponseWriter) erro
 			return err
 		}
 
+		var geminiResponse *GeminiResponse
+		var conversation any
 		defer func() {
-			if saveErr := saveHistory(ctx, tx, sessionLastId, "model", Result.String()); saveErr != nil {
+			if geminiResponse == nil {
+				conversation = Result.String()
+			} else {
+				conversation = geminiResponse
+			}
+			if saveErr := saveHistory(ctx, tx, sessionLastId, "model", conversation); saveErr != nil {
 				log.Printf("保存模型历史记录失败: %v", saveErr)
 				if err == nil {
 					err = saveErr
@@ -241,7 +270,11 @@ func Chat(input configuration.UserInput, db *sql.DB, w http.ResponseWriter) erro
 		if strings.HasPrefix(contentType, "text/event-stream") {
 			return requestBody.handleSSEResponse(w, resp)
 		} else if strings.HasPrefix(contentType, "application/json") {
-			return requestBody.handleJSONResponse(w, resp)
+			geminiResponse, err = requestBody.handleJSONResponse(w, resp)
+			if err != nil {
+				return err
+			}
+			return nil
 		} else {
 			return fmt.Errorf("unexpected Content-Type: %v", contentType)
 		}
@@ -272,7 +305,7 @@ func delHistoryInContentIDBySessionID(db *sql.DB, sessionID int64, contentID int
 func retryTransaction(db *sql.DB, ctx context.Context, txFunc func(tx *sql.Tx) error) error {
 	var err error
 	for i := 0; i < maxRetries; i++ {
-		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 		if err != nil {
 			return fmt.Errorf("beginning transaction: %w", err)
 		}
@@ -294,11 +327,11 @@ func retryTransaction(db *sql.DB, ctx context.Context, txFunc func(tx *sql.Tx) e
 		tx.Rollback() // 出现其他错误时回滚事务
 		return fmt.Errorf("transaction failed: %w", err)
 	}
-	return fmt.Errorf("failed to complete transaction after %d retries: %w", maxRetries, err)
+	return fmt.Errorf("failed to complete transaction after %d retries: %v", maxRetries, err)
 }
 
 func saveSession(ctx context.Context, tx *sql.Tx, session *persistence.Session) (int64, error) {
-	sessionBase, err := new(gemini_util.Util).Encrypt()
+	sessionBase, err := new(gemini_util.Util).Encrypt("base")
 	if err != nil {
 		return 0, err
 	}
@@ -349,7 +382,7 @@ func PostRequestOnClient(input configuration.UserInput) (*http.Response, error) 
 
 func saveHistory(ctx context.Context, tx *sql.Tx, sessionID int64, role string, input interface{}) error {
 	var message string
-	var files []configuration.InlineDataDto
+	var files []*configuration.InlineDataDto
 
 	// Type assertion to handle both string and UserInput
 	switch v := input.(type) {
@@ -358,6 +391,24 @@ func saveHistory(ctx context.Context, tx *sql.Tx, sessionID int64, role string, 
 	case configuration.UserInput:
 		message = v.Message
 		files = v.Files
+	case *GeminiResponse:
+		var geminiResponse = input.(*GeminiResponse)
+		for _, candidate := range geminiResponse.Candidates {
+			if candidate.Content == nil || candidate.Content.Parts == nil {
+				return nil
+			}
+			for _, part := range candidate.Content.Parts {
+				if part.Text != "" {
+					message = part.Text
+				}
+				if part.InlineData != nil {
+					files = append(files, &configuration.InlineDataDto{
+						MimeType: part.InlineData.MimeType,
+						Data:     part.InlineData.Data,
+					})
+				}
+			}
+		}
 	default:
 		return fmt.Errorf("unsupported input type: %T", input)
 	}
@@ -485,9 +536,11 @@ func FindHistoryBySessionID(db *sql.DB, sessionID int64, isNeedContentID bool) (
 			contentMap[res.ContentID.Int64] = content
 		}
 		part1, ok := partMap[res.PartID.Int64]
-		if !ok {
-			part1 = &Part{Text: res.Text.String}
-			content.Parts = append(content.Parts, part1)
+		if !ok && res.Text.Valid {
+			if res.Text.String != "" {
+				part1 = &Part{Text: res.Text.String}
+				content.Parts = append(content.Parts, part1)
+			}
 		}
 		if res.InlineData != nil {
 			part2 := &Part{}
