@@ -179,6 +179,7 @@ func BuildAIApi(DefaultModel, ContentType string) string {
 		"gemini-2.0-flash":              EnvMap["GEMINI_MODEL_2.0"],
 		"gemini-2.0-flash-exp":          EnvMap["GEMINI_MODEL_2_EXP"],
 		"gemini-2.0-flash-thinking-exp": EnvMap["GEMINI_MODEL_2.0_Thinking"],
+		"gemini-2.5-pro":                EnvMap["GEMINI_MODEL_2.5_PRO"],
 		"gemini-2.0-pro":                EnvMap["GEMINI_MODEL_2.0_PRO"],
 		"gemini-exp-1206":               EnvMap["GEMINI_MODEL_1206"],
 	}

@@ -13,15 +13,16 @@
     <script src="templates/sdk/http_cdn.jsdelivr.net_npm_marked_marked.min.js"></script>
     <script src="templates/sdk/http_cdnjs.cloudflare.com_ajax_libs_highlight.js_11.8.0_highlight.min.js"></script>
     <script src="templates/sdk/http_cdnjs.cloudflare.com_ajax_libs_jspdf_2.5.1_jspdf.umd.js"></script>
+    <link href="favicon.ico" rel="icon" type="image/x-icon">
 </head>
 <body>
 <script src="templates/index.js"></script>
 <header>
     <span id="conversation-title">{{.Title}}</span>
-    <div id="model-selector" style="display: flex; align-items: center;">
-        <label for="model-select" style="margin-right: 5px;"></label>
+    <div id="model-selector">
         <select id="model-select" onchange="changeModel()">
             <option selected value="gemini-2.0-flash">Gemini 2.0 Flash (默认)</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
             <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (图片)</option>
             <option value="gemini-exp-1206">Gemini Experimental 1206</option>
             <option value="gemini-2.0-pro">Gemini 2.0 Pro</option>
@@ -29,35 +30,38 @@
             <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
             <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
         </select>
-        <!-- Theme Toggle Button -->
-        <button id="export-pdf" onclick="exportToPDF()">
+        <button id="export-pdf" onclick="exportToPDF()" title="导出PDF">
             <i class="fas fa-file-pdf"></i>
         </button>
-        <button id="theme-toggle">
+        <button id="theme-toggle" title="切换主题">
             <i class="fas fa-sun"></i>
         </button>
     </div>
 </header>
 <div id="main-container">
-    <!-- Left Chat Area -->
+    <!-- 左侧聊天区域 -->
     <div id="chat-area">
         <div id="chat-container"></div>
-        <!-- Scroll to Bottom Button -->
-        <button id="scroll-to-bottom" style="display: none;"><i class="fas fa-arrow-down"></i></button>
+        <!-- 滚动到底部按钮 -->
+        <button id="scroll-to-bottom" title="滚动到底部"><i class="fas fa-arrow-down"></i></button>
         <div id="input-container">
-            <button id="new-conversation-button" onclick="startNewConversation()"><i class="fas fa-comment-dots"></i>
+            <button id="new-conversation-button" onclick="startNewConversation()" title="新对话">
+                <i class="fas fa-comment-dots"></i>
             </button>
-            <label for="file-input" id="select-file-label"> + </label>
+            <label for="file-input" id="select-file-label" title="上传文件">
+                <i class="fas fa-plus"></i>
+            </label>
             <input id="file-input" multiple onchange="handleFiles(this.files)" style="display: none;" type="file">
             <div id="fileInfo" style="display: none"></div>
             <textarea id="user-input" oninput="adjustTextareaHeight()" onpaste="handlePaste(event)"
-                      placeholder="Type your question or paste your file content here..."
-                      style="width: 696px; height: 5px;"></textarea>
-            <button id="send-button" onclick="sendMessage(false)">Send</button>
+                      placeholder="在这里输入您的问题或粘贴文件内容..."></textarea>
+            <button id="send-button" onclick="sendMessage(false)">
+                <i class="fas fa-paper-plane"></i>
+            </button>
         </div>
     </div>
 
-    <!-- Right History Container -->
+    <!-- 右侧历史记录容器 -->
     <div id="history-container">
         <h3>历史记录</h3>
         <ul id="history-list"></ul>

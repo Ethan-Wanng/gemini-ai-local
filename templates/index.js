@@ -44,7 +44,30 @@ document.addEventListener("DOMContentLoaded", function () {
     themeToggle.addEventListener('click', function () {
         toggleTheme();
     });
+
+    // 添加窗口大小调整监听
+    adjustChatContainerHeight();
+
+    // 添加窗口大小变化监听
+    window.addEventListener('resize', adjustChatContainerHeight);
 });
+
+// 调整聊天容器高度的函数
+function adjustChatContainerHeight() {
+    const chatContainer = document.getElementById('chat-container');
+    const inputContainer = document.getElementById('input-container');
+    const mainContainer = document.getElementById('main-container');
+
+    if (!chatContainer || !inputContainer || !mainContainer) return;
+
+    // 计算可用高度
+    const availableHeight = mainContainer.clientHeight;
+    const inputHeight = inputContainer.offsetHeight;
+    const padding = 20; // 留一些间距
+
+    // 设置聊天容器高度
+    chatContainer.style.height = `${availableHeight - inputHeight - padding + 5}px`;
+}
 
 async function setSessionID() {
     try {
@@ -122,36 +145,137 @@ function handleFiles(files) {
     // 清空现有内容，重新渲染
     uploadedInfoDiv.innerHTML = '';
 
-    // Use a local array for processing, do not directly modify uploadedFiles during iteration
+    // 添加标题和文件计数
+    const headerContainer = document.createElement("div");
+    headerContainer.className = "files-header";
+    headerContainer.style.display = "flex";
+    headerContainer.style.justifyContent = "space-between";
+    headerContainer.style.alignItems = "center";
+    headerContainer.style.marginBottom = "10px";
+    headerContainer.style.borderBottom = "1px solid var(--border-color)";
+    headerContainer.style.paddingBottom = "8px";
+
+    const fileIcon = document.createElement("i");
+    fileIcon.className = "fas fa-paperclip";
+    fileIcon.style.marginRight = "8px";
+
+    const fileCountDisplay = document.createElement("div");
+    fileCountDisplay.className = "file-count-display";
+    fileCountDisplay.style.fontWeight = "bold";
+    fileCountDisplay.style.display = "flex";
+    fileCountDisplay.style.alignItems = "center";
+    fileCountDisplay.innerHTML = `${fileIcon.outerHTML} 已选择 ${files.length} 个文件`;
+
+    headerContainer.appendChild(fileCountDisplay);
+
+    // 计算总文件大小
     const filesToProcess = Array.from(files); // Create a copy
+    const totalSize = filesToProcess.reduce((sum, file) => sum + file.size, 0);
+    const totalSizeDisplay = document.createElement("div");
+    totalSizeDisplay.className = "total-size-display";
+    totalSizeDisplay.textContent = `总大小: ${formatFileSize(totalSize)}`;
+    headerContainer.appendChild(totalSizeDisplay);
 
+    uploadedInfoDiv.appendChild(headerContainer);
 
-    filesToProcess.forEach((file, index) => { // Use index from the local array
+    // 创建文件列表容器
+    const filesListContainer = document.createElement("div");
+    filesListContainer.className = "files-list-container";
+    filesListContainer.style.maxHeight = "200px";
+    filesListContainer.style.overflowY = "auto";
+    filesListContainer.style.padding = "5px";
+    filesListContainer.style.marginBottom = "10px";
 
+    filesToProcess.forEach((file, index) => {
         const fileContainer = document.createElement("div");
         fileContainer.className = "file-info-container";
-        fileContainer.dataset.fileIndex = String(index);  // store index for the current file list
+        fileContainer.dataset.fileIndex = String(index);
+        fileContainer.style.display = "flex";
+        fileContainer.style.alignItems = "center";
+        fileContainer.style.justifyContent = "space-between";
+        fileContainer.style.padding = "8px";
+        fileContainer.style.margin = "5px 0";
+        fileContainer.style.backgroundColor = "var(--bg-color)";
+        fileContainer.style.borderRadius = "6px";
+        fileContainer.style.border = "1px solid var(--border-color)";
 
+        // 文件信息区域 (左侧)
+        const fileInfoLeft = document.createElement("div");
+        fileInfoLeft.style.display = "flex";
+        fileInfoLeft.style.alignItems = "center";
 
+        // 添加文件类型图标
+        const fileTypeIcon = document.createElement("i");
+        fileTypeIcon.className = getFileIcon(file.type);
+        fileTypeIcon.style.fontSize = "18px";
+        fileTypeIcon.style.marginRight = "10px";
+        fileInfoLeft.appendChild(fileTypeIcon);
+
+        // 文件预览/信息
         if (file.type.startsWith("image/")) {
-            const img = document.createElement("img");
-            img.src = URL.createObjectURL(file);
-            img.onload = () => URL.revokeObjectURL(img.src);  // Revoke the object URL after loading
-            fileContainer.appendChild(img);
-        } else {
-            const fileInfo = document.createElement("p");
-            fileInfo.textContent = `${file.name} (${formatFileSize(file.size)})`;
-            fileContainer.appendChild(fileInfo);
+            const thumbnailContainer = document.createElement("div");
+            thumbnailContainer.style.width = "40px";
+            thumbnailContainer.style.height = "40px";
+            thumbnailContainer.style.marginRight = "10px";
+            thumbnailContainer.style.overflow = "hidden";
+            thumbnailContainer.style.borderRadius = "4px";
+
+            const imgPreview = document.createElement("img");
+            imgPreview.style.width = "100%";
+            imgPreview.style.height = "100%";
+            imgPreview.style.objectFit = "cover";
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imgPreview.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+
+            thumbnailContainer.appendChild(imgPreview);
+            fileInfoLeft.appendChild(thumbnailContainer);
         }
 
+        const fileDetails = document.createElement("div");
+        fileDetails.style.display = "flex";
+        fileDetails.style.flexDirection = "column";
+
+        const fileName = document.createElement("div");
+        fileName.textContent = file.name;
+        fileName.style.fontSize = "14px";
+        fileName.style.fontWeight = "500";
+        fileDetails.appendChild(fileName);
+
+        const fileSize = document.createElement("div");
+        fileSize.textContent = formatFileSize(file.size);
+        fileSize.style.fontSize = "12px";
+        fileSize.style.color = "var(--text-secondary-color)";
+        fileDetails.appendChild(fileSize);
+
+        fileInfoLeft.appendChild(fileDetails);
+        fileContainer.appendChild(fileInfoLeft);
+
+        // 删除按钮 (右侧)
         const deleteBtn = document.createElement("button");
         deleteBtn.className = "file-delete-btn";
-        deleteBtn.innerHTML = "×";
+        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+        deleteBtn.title = "移除文件";
+        deleteBtn.style.border = "none";
+        deleteBtn.style.background = "transparent";
+        deleteBtn.style.color = "var(--text-secondary-color)";
+        deleteBtn.style.fontSize = "16px";
+        deleteBtn.style.cursor = "pointer";
+        deleteBtn.style.transition = "color 0.2s";
+        deleteBtn.onmouseover = () => {
+            deleteBtn.style.color = "var(--error-color, #f44336)";
+        };
+        deleteBtn.onmouseout = () => {
+            deleteBtn.style.color = "var(--text-secondary-color)";
+        };
+
         deleteBtn.onclick = () => {
             const fileIndex = parseInt(fileContainer.dataset.fileIndex);
 
-            if (!isNaN(fileIndex) && fileIndex >= 0) { // Added isNaN check
-                // Find the correct index in uploadedFiles based on file identity
+            if (!isNaN(fileIndex) && fileIndex >= 0) {
                 const uploadedIndex = uploadedFiles.findIndex(uf => uf === filesToProcess[fileIndex]);
 
                 if (uploadedIndex > -1) {
@@ -163,22 +287,68 @@ function handleFiles(files) {
                     fileInput.files = dt.files;
                 }
 
-                //Remove the container.  Do this *after* updating uploadedFiles and fileInput
                 fileContainer.remove();
-
-                // Re-render with the updated file list, no recursion
                 handleFiles(uploadedFiles);
             }
         };
+
         fileContainer.appendChild(deleteBtn);
-        uploadedInfoDiv.appendChild(fileContainer);
+        filesListContainer.appendChild(fileContainer);
     });
+
+    uploadedInfoDiv.appendChild(filesListContainer);
+
+    // 模拟上传准备的进度条
+    const progressContainerWrapper = document.createElement("div");
+    progressContainerWrapper.style.marginTop = "10px";
+
+    const progressLabel = document.createElement("div");
+    progressLabel.textContent = "准备上传中...";
+    progressLabel.style.fontSize = "12px";
+    progressLabel.style.marginBottom = "5px";
+    progressContainerWrapper.appendChild(progressLabel);
+
+    const progressContainer = document.createElement("div");
+    progressContainer.className = "file-upload-progress";
+    progressContainer.style.height = "6px";
+    progressContainer.style.backgroundColor = "rgba(0, 0, 0, 0.1)";
+    progressContainer.style.borderRadius = "3px";
+    progressContainer.style.overflow = "hidden";
+
+    const progressBar = document.createElement("div");
+    progressBar.className = "file-upload-progress-bar";
+    progressBar.style.height = "100%";
+    progressBar.style.width = "0%";
+    progressBar.style.backgroundColor = "var(--button-bg-color)";
+    progressBar.style.transition = "width 0.2s";
+
+    progressContainer.appendChild(progressBar);
+    progressContainerWrapper.appendChild(progressContainer);
+    uploadedInfoDiv.appendChild(progressContainerWrapper);
+
+    // 模拟文件准备进度
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += 5;
+        progressBar.style.width = `${progress}%`;
+        if (progress >= 100) {
+            clearInterval(progressInterval);
+            progressLabel.textContent = "准备完成";
+            setTimeout(() => {
+                progressContainerWrapper.style.display = "none";
+            }, 500);
+        }
+    }, 50);
 
     // Append uploadedInfoDiv to the chat container only once
     if (!chatContainer.contains(uploadedInfoDiv)) {
         chatContainer.appendChild(uploadedInfoDiv);
     }
+
     chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    // 将文件添加到上传队列
+    uploadedFiles = [...filesToProcess];
 }
 
 function formatFileSize(size) {
@@ -192,22 +362,40 @@ function formatFileSize(size) {
     return `${sizeInUnit.toFixed(2)} ${units[index]}`;
 }
 
+let originalHeight = ""
+
 async function sendMessage(isReply) {
+    console.log("发送消息，isReply:", isReply); // 添加调试日志
+
     const inputField = document.getElementById("user-input");
     const chatContainer = document.getElementById("chat-container");
     const fileInput = document.getElementById("file-input");
     const uploadedFilesInfo = document.getElementById("uploaded-files-info");
 
     const userMessage = inputField.value.trim();
+    console.log("用户消息内容:", userMessage); // 添加调试日志
 
-    const content_id = parseInt(inputField.dataset.content_id);
-    if (!userMessage) return;
+    // 从inputField的dataset中获取content_id（如果存在）
+    const content_id = parseInt(inputField.dataset.content_id || "0");
+    console.log("content_id:", content_id); // 添加调试日志
+
+    if (!userMessage) {
+        console.log("用户消息为空，不发送");
+        return;
+    }
+
+    // 保存当前输入框高度，供后续比较
+    originalHeight = inputField.style.height;
+
+    // 处理输入框内容和文件
     adjustTextareaHeight()
     let files = fileInput?.files
     let fileBase64s = [];  // Store image objects
 
     // Process images if files exist
-    if (files) {
+    if (files && files.length > 0) {
+        console.log("处理文件数量:", files.length); // 添加调试日志
+
         const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0);
         const maxSize = 200 * 1024 * 1024; // 200MB in bytes
 
@@ -259,12 +447,29 @@ async function sendMessage(isReply) {
     const {aiMessageElement, aiMessageElementOnCopy} = createAIMessageElements(conversationContainer);
     aiMessageElement.textContent = "AI is thinking...";
 
+    // 调整容器高度
+    adjustChatContainerHeight();
+
     scrollToBottom(chatContainer);
+
+    // 清空输入字段并重置高度
     inputField.value = ""; // Clear the input field
+
+    // 完全重置输入框高度
+    inputField.style.height = ''; // 清空内联样式高度
+    inputField.style.height = '40px'; // 设置回默认高度
+    inputField.style.overflowY = 'hidden'; // 隐藏滚动条
+
+    // 重置content_id，防止影响下一次普通发送
+    if (!isReply) {
+        inputField.dataset.content_id = "";
+    }
 
     try {
         let sessionId = getSessionId();
         let flag = !sessionId;
+
+        console.log("发送请求到服务器，sessionId:", sessionId, "isReply:", isReply); // 添加调试日志
 
         const chatResponse = await fetchChatResponse(userMessage, sessionId, content_id, fileBase64s, isReply);
         if (!chatResponse.ok) {
@@ -282,11 +487,23 @@ async function sendMessage(isReply) {
 
         await updateHistoryListFromServer();
         await loadHistoryById(getSessionId(), "")
+
+        // 在完成后再次调整高度
+        adjustChatContainerHeight();
+
     } catch (error) {
+        console.error("发送消息时出错:", error); // 改进错误日志
         handleError(conversationContainer, error);
     } finally {
         fileInput.value = ""
-        adjustTextareaHeight()
+
+        // 再次确保输入框高度重置
+        inputField.style.height = ''; // 清空内联样式高度
+        inputField.style.height = '40px'; // 设置回默认高度
+        inputField.style.overflowY = 'hidden'; // 隐藏滚动条
+
+        // 再次确保调整高度
+        setTimeout(adjustChatContainerHeight, 200);
     }
 }
 
@@ -514,15 +731,23 @@ async function handleFileInput(fileInput) {
 }
 
 async function fetchChatResponse(userMessage, sessionId, content_id, fileBase64s, isReply) {
+    console.log("发送请求参数:", {
+        message: userMessage,
+        session_id: sessionId,
+        content_id: content_id,
+        files_count: fileBase64s.length,
+        is_reply: isReply
+    });
+
     return fetch("/chat", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
             message: userMessage,
-            session_id: sessionId,
-            content_id: content_id,
+            session_id: sessionId || 0,
+            content_id: content_id || 0,
             files: fileBase64s,
-            is_reply: isReply
+            is_reply: !!isReply // 确保是布尔值
         }),
     });
 }
@@ -534,10 +759,21 @@ async function getErrorMessage(response) {
 
 function createAIMessageElements(conversationContainer) {
     const aiMessageElement = document.createElement("div");
-    const aiMessageElementOnCopy = document.createElement("div");
     aiMessageElement.className = "message ai-message";
-    aiMessageElementOnCopy.className = "message copy ai-message";
-    aiMessageElementOnCopy.style.display = "none";
+
+    const loadingIndicator = document.createElement("div");
+    loadingIndicator.className = "loading-indicator";
+    loadingIndicator.innerHTML = `
+        <span class="loading-dot"></span>
+        <span class="loading-dot"></span>
+        <span class="loading-dot"></span>
+    `;
+
+    aiMessageElement.appendChild(loadingIndicator);
+    aiMessageElement.appendChild(document.createTextNode("AI思考中..."));
+
+    const aiMessageElementOnCopy = document.createElement("span");
+
     conversationContainer.appendChild(aiMessageElement);
     return {aiMessageElement, aiMessageElementOnCopy};
 }
@@ -568,7 +804,7 @@ async function handleChatResponse(chatResponse, aiMessageElement, aiMessageEleme
             throw error;
         }
     } finally {
-        addButtons(aiMessageElement, aiMessageElementOnCopy, userMessage);
+        addActionButtons(aiMessageElement, userMessage);
         enableCodeCopy();
     }
 }
@@ -643,55 +879,60 @@ async function updateHistoryListFromServer() {
     }
 }
 
-function handleError(conversationContainer, error, userMessage) {
-    console.error("发送消息错误:", error);
-    const errorContainer = document.createElement("div");
-    errorContainer.className = "message ai-message error-message";
+function handleError(conversationContainer, error) {
+    const aiMessageElement = conversationContainer.querySelector(".ai-message");
 
-    const errorText = document.createElement("div");
-    // 根据错误类型显示不同的错误信息
-    if (error.message.includes('429')) {
-        errorText.textContent = error.message;
-    } else if (error.message.includes('400')) {
-        errorText.textContent = error.message;
-    } else if (error.message.includes('401')) {
-        errorText.textContent = "认证失败，请重新登录。";
-    } else if (error.message.includes('403')) {
-        errorText.textContent = "无权限访问该资源。";
-    } else if (error.message.includes('500')) {
-        errorText.textContent = "服务器内部错误，请稍后重试。";
-    } else if (error.message.includes('503')) {
-        errorText.textContent = "服务暂时不可用，请稍后重试。";
-    } else if (error.message.includes('timeout')) {
-        errorText.textContent = "请求超时，请检查网络连接。";
-    } else {
-        errorText.textContent = "发生错误: " + error.message;
-    }
-    errorContainer.appendChild(errorText);
-
-    if (userMessage) {
-        const retryButton = document.createElement("button");
-        retryButton.textContent = "重试";
-        retryButton.className = "retry-button";
-        retryButton.style.marginTop = "10px";
-        retryButton.style.padding = "5px 10px";
-        retryButton.style.backgroundColor = "#f0ad4e";
-        retryButton.style.border = "none";
-        retryButton.style.borderRadius = "3px";
-        retryButton.style.cursor = "pointer";
-        retryButton.onclick = async () => {
-            conversationContainer.remove();
-            document.getElementById("user-input").value = userMessage;
-            await sendMessage(false);
-        };
-        errorContainer.appendChild(retryButton);
+    // 移除加载指示器
+    const loadingIndicator = aiMessageElement.querySelector(".loading-indicator");
+    if (loadingIndicator) {
+        loadingIndicator.remove();
     }
 
-    conversationContainer.appendChild(errorContainer);
+    // 创建错误提示元素
+    const errorElement = document.createElement("div");
+    errorElement.className = "error-message";
+
+    const errorIcon = document.createElement("i");
+    errorIcon.className = "fas fa-exclamation-circle";
+    errorElement.appendChild(errorIcon);
+
+    const errorText = document.createElement("span");
+    errorText.textContent = " " + (error.message || "发生了一个错误，请稍后再试");
+    errorElement.appendChild(errorText);
+
+    // 添加重试按钮
+    const retryButton = document.createElement("button");
+    retryButton.className = "retry-button";
+    retryButton.innerHTML = '<i class="fas fa-redo-alt"></i> 重试';
+    retryButton.onclick = () => {
+        // 获取用户消息内容
+        const userMessageElement = conversationContainer.querySelector(".user-message");
+        const userMessageText = userMessageElement.querySelector(".message-text")?.textContent || "";
+
+        // 删除当前错误的对话
+        conversationContainer.remove();
+
+        // 重新发送消息
+        const inputField = document.getElementById("user-input");
+        inputField.value = userMessageText;
+        sendMessage(false);
+    };
+
+    errorElement.appendChild(retryButton);
+    aiMessageElement.innerHTML = '';
+    aiMessageElement.appendChild(errorElement);
 }
 
-function scrollToBottom(chatContainer) {
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+function scrollToBottom(container) {
+    if (autoScroll) {
+        // 使用requestAnimationFrame确保DOM更新后再滚动
+        requestAnimationFrame(() => {
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: 'smooth'
+            });
+        });
+    }
 }
 
 function enableCodeCopy() {
@@ -734,77 +975,183 @@ function enableCodeCopy() {
     });
 }
 
-// 添加按钮
-function addButtons(aiMessageElement, aiMessageElementOnCopy, userMessage) {
-    const buttonContainer = document.createElement("div");
-    buttonContainer.style.marginTop = "10px";
-    buttonContainer.style.display = "flex";
-    buttonContainer.style.gap = "10px";
+// 创建AI回复后添加操作按钮（重新回答、复制内容）
+function addActionButtons(aiMessageElement, messageText) {
+    // 创建操作按钮容器
+    const actionButtons = document.createElement("div");
+    actionButtons.className = "action-buttons";
 
-    // 复制按钮
-    const copyButton = document.createElement("button");
-    copyButton.textContent = "复制";
-    copyButton.className = "copy-btn";
-    copyButton.onclick = () => {
-        navigator.clipboard.writeText(aiMessageElementOnCopy.textContent)
-            .then(() => {
-                copyButton.textContent = "复制成功!";
-                setTimeout(() => (copyButton.textContent = "复制"), 1500);
-            })
-            .catch(() => {
-                copyButton.textContent = "复制失败";
-                setTimeout(() => (copyButton.textContent = "复制"), 1500);
-            });
-    };
-
-    const retryButton = document.createElement("button");
-    retryButton.textContent = "重新回答";
-    retryButton.className = "copy-btn";
-    retryButton.style.backgroundColor = "#f0ad4e"; // 设置按钮颜色为橙色
-    retryButton.onclick = async () => {
-        const conversation = retryButton.closest('.conversation');
-        const previousConversation = conversation.previousElementSibling;
-        const content_id = previousConversation.dataset.content_id;
-        console.log("content_id", content_id)
-        const userInput = document.getElementById("user-input");
-        const fileInput = document.getElementById("file-input");
-
-        userInput.value = userMessage;
-        userInput.dataset.content_id = content_id;
-
-        const fileContainers = previousConversation.querySelector(".user-message").querySelectorAll('.file-container');
-        if (fileContainers && fileContainers.length > 0) {
-            const dataTransfer = new DataTransfer();
-            fileContainers.forEach(container => {
-                // Check for media elements first
-                const mediaElement = container.querySelector('img, video, audio');
-                if (mediaElement) {
-                    const base64Data = mediaElement.src.split(',')[1];
-                    const mimeType = mediaElement.src.match(/^data:(.*?);/)[1];
-                    const blob = base64ToBlob(base64Data, mimeType);
-                    const file = new File([blob], `file.${mimeType.split('/')[1]}`, {type: mimeType});
-                    dataTransfer.items.add(file);
-                } else {
-                    // Handle other file types (text, pdf, etc.)
-                    const fileLink = container.querySelector('a');
-                    if (fileLink) {
-                        const mimeType = fileLink.href.split(';')[0].split(':')[1];
-                        const base64Data = fileLink.href.split(',')[1];
-                        const blob = base64ToBlob(base64Data, mimeType);
-                        const file = new File([blob], `file.${getFileType(mimeType).toLowerCase()}`, {type: mimeType});
-                        dataTransfer.items.add(file);
-                    }
-                }
-            });
-            fileInput.files = dataTransfer.files;
+    // 创建重新回答按钮
+    const reanswer = document.createElement("button");
+    reanswer.className = "reanswer-btn";
+    reanswer.innerHTML = '<i class="fas fa-redo-alt"></i> 重新回答';
+    reanswer.onclick = function (e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
         }
 
-        await sendMessage(true);
+        console.log("点击了重新回答按钮");
+
+        try {
+            // 获取当前聊天窗口
+            const conversationContainer = aiMessageElement.closest('.conversation');
+            if (!conversationContainer) {
+                console.error("找不到对话容器");
+                return;
+            }
+
+            // 查找前一个对话容器
+            const previousConversation = conversationContainer.previousElementSibling;
+            if (!previousConversation) {
+                console.error("找不到前一个对话容器");
+                return;
+            }
+
+            // 获取用户问题
+            const userMessageElement = previousConversation.querySelector('.user-message');
+            if (!userMessageElement) {
+                console.error("找不到用户消息元素");
+                return;
+            }
+
+            // 获取用户消息文本
+            const messageTextElement = userMessageElement.querySelector('.message-text');
+            let userMessageText = "";
+            if (messageTextElement) {
+                userMessageText = messageTextElement.textContent.trim();
+                console.log("获取到用户消息:", userMessageText);
+            } else {
+                console.error("找不到消息文本元素");
+                return;
+            }
+
+            // 获取content_id
+            const content_id = previousConversation.dataset.content_id;
+            console.log("获取到content_id:", content_id);
+
+            // 设置输入字段
+            const userInput = document.getElementById("user-input");
+            userInput.value = userMessageText;
+
+            // 调整输入框高度以适应文本
+            adjustTextareaHeight(userInput);
+
+            if (content_id) {
+                userInput.dataset.content_id = content_id;
+            }
+
+            // 处理文件
+            const fileContainers = userMessageElement.querySelectorAll('.file-container');
+            const fileInput = document.getElementById("file-input");
+
+            if (fileContainers && fileContainers.length > 0) {
+                console.log("找到文件容器数量:", fileContainers.length);
+                const dataTransfer = new DataTransfer();
+
+                fileContainers.forEach((container, index) => {
+                    console.log(`处理第${index + 1}个文件`);
+
+                    // 检查媒体元素
+                    const mediaElement = container.querySelector('img, video, audio');
+                    if (mediaElement) {
+                        const src = mediaElement.src;
+                        console.log("找到媒体元素，src:", src.substring(0, 50) + "...");
+
+                        // 确保src是data URL格式
+                        if (src.startsWith('data:')) {
+                            try {
+                                const base64Data = src.split(',')[1];
+                                const mimeType = src.match(/^data:(.*?);/)[1];
+                                const blob = base64ToBlob(base64Data, mimeType);
+                                const file = new File([blob], `file.${mimeType.split('/')[1]}`, {type: mimeType});
+                                dataTransfer.items.add(file);
+                                console.log("成功添加媒体文件");
+                            } catch (err) {
+                                console.error("处理媒体文件出错:", err);
+                            }
+                        }
+                    } else {
+                        // 处理其他文件类型(文本，PDF等)
+                        const fileLink = container.querySelector('a');
+                        if (fileLink && fileLink.href.startsWith('data:')) {
+                            try {
+                                const mimeType = fileLink.href.split(';')[0].split(':')[1];
+                                const base64Data = fileLink.href.split(',')[1];
+                                const blob = base64ToBlob(base64Data, mimeType);
+                                const file = new File([blob], `file.${getFileType(mimeType).toLowerCase()}`, {type: mimeType});
+                                dataTransfer.items.add(file);
+                                console.log("成功添加文件链接");
+                            } catch (err) {
+                                console.error("处理文件链接出错:", err);
+                            }
+                        }
+                    }
+                });
+
+                // 设置文件输入
+                if (dataTransfer.files.length > 0) {
+                    console.log("设置文件输入，文件数量:", dataTransfer.files.length);
+                    fileInput.files = dataTransfer.files;
+                    // 更新全局uploadedFiles
+                    uploadedFiles = Array.from(dataTransfer.files);
+                    // 显示文件信息
+                    handleFiles(uploadedFiles);
+                }
+            }
+
+            // 删除当前对话容器
+            console.log("移除对话容器");
+            conversationContainer.remove();
+
+            // 调用发送消息函数
+            console.log("调用sendMessage函数");
+            sendMessage(true);
+
+        } catch (error) {
+            console.error("重新回答时发生错误:", error);
+        }
     };
 
-    buttonContainer.appendChild(copyButton);
-    buttonContainer.appendChild(retryButton);
-    aiMessageElement.parentElement.appendChild(buttonContainer);
+    // 创建复制对话内容按钮
+    const copyContent = document.createElement("button");
+    copyContent.className = "copy-content-btn";
+    copyContent.innerHTML = '<i class="fas fa-copy"></i> 复制内容';
+    copyContent.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // 复制AI回复内容到剪贴板
+        navigator.clipboard.writeText(messageText)
+            .then(() => {
+                // 临时改变按钮文本表示复制成功
+                const originalText = copyContent.innerHTML;
+                copyContent.innerHTML = '<i class="fas fa-check"></i> 已复制';
+                copyContent.style.backgroundColor = "rgba(76, 175, 80, 0.2)";
+                copyContent.style.color = "#4CAF50";
+
+                // 2秒后恢复原始文本
+                setTimeout(() => {
+                    copyContent.innerHTML = originalText;
+                    copyContent.style.backgroundColor = "";
+                    copyContent.style.color = "";
+                }, 2000);
+            })
+            .catch(err => {
+                console.error('复制失败: ', err);
+                copyContent.innerHTML = '<i class="fas fa-times"></i> 复制失败';
+                setTimeout(() => {
+                    copyContent.innerHTML = '<i class="fas fa-copy"></i> 复制内容';
+                }, 2000);
+            });
+    };
+
+    // 将按钮添加到容器中
+    actionButtons.appendChild(copyContent);
+    actionButtons.appendChild(reanswer);
+
+    // 将按钮容器添加到AI消息元素中
+    aiMessageElement.appendChild(actionButtons);
 }
 
 function base64ToBlob(base64, mimeType) {
@@ -825,14 +1172,88 @@ document.addEventListener('keydown', function (event) {
     } // Shift+Enter 会使用默认的换行行为
 });
 
-function adjustTextareaHeight() {
-    const textarea = document.getElementById("user-input");
+const textarea = document.getElementById('user-input');
+if (textarea) {
+    // Add input event listener
+    textarea.addEventListener('input', function () {
+        adjustTextareaHeight(this);
+    });
 
-    textarea.style.height = '5px';
-    const scrollHeight = textarea.scrollHeight - 22;
-    const maxHeight = 120;
-    textarea.style.height = Math.min(scrollHeight, maxHeight) + 'px';
-    textarea.style.overflowY = scrollHeight > maxHeight ? 'scroll' : 'hidden';
+    // Add keydown event listener for special keys
+    textarea.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            document.getElementById('send-button').click();
+        }
+        // Allow Shift+Enter for new lines
+        if (event.key === 'Enter' && event.shiftKey) {
+            setTimeout(() => adjustTextareaHeight(this), 0);
+        }
+    });
+}
+
+function adjustTextareaHeight(textarea) {
+    // 如果没有传入参数，则使用默认的文本区域
+    const textareaElement = textarea || document.getElementById("user-input");
+    if (!textareaElement) return;
+
+    // 获取文本内容
+    const textContent = textareaElement.value.trim();
+
+    // 如果文本为空，重置为默认高度
+    if (!textContent) {
+        textareaElement.style.height = '';
+        textareaElement.style.height = '40px';
+        textareaElement.style.overflowY = 'hidden';
+        return;
+    }
+
+    // 调整高度
+    textareaElement.style.height = '5px';
+    const scrollHeight = textareaElement.scrollHeight - 20; // 稍微减少边距调整
+    const maxHeight = 200; // 增加最大高度从120px到200px
+    textareaElement.style.height = Math.min(scrollHeight, maxHeight) + 'px';
+    textareaElement.style.overflowY = scrollHeight > maxHeight ? 'scroll' : 'hidden';
+
+    // 调整文本区域高度后，也调整聊天容器的高度
+    setTimeout(maintainChatHeight, 0);
+}
+
+// function adjustTextareaHeight(textarea) {
+//     // If no textarea is provided, get the default one
+//     const textareaElement = textarea || document.getElementById("user-input");
+//     if (!textareaElement) return;
+//
+//     // Reset height to auto to get proper scrollHeight
+//     textareaElement.style.height = 'auto';
+//
+//     // Calculate new height
+//     const scrollHeight = textareaElement.scrollHeight;
+//     const maxHeight = 200; // Maximum height in pixels
+//
+//     // Set new height with limits
+//     const newHeight = Math.min(Math.max(40, scrollHeight), maxHeight);
+//     textareaElement.style.height = newHeight + 'px';
+//
+//     // Show scrollbar if content exceeds max height
+//     textareaElement.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
+//
+//     // Adjust chat container height
+//     adjustChatContainerHeight();
+// }
+
+// 聊天容器高度维护函数
+function maintainChatHeight() {
+    const chatContainer = document.getElementById("chat-container");
+    if (!chatContainer) return;
+
+    // 获取保存的初始高度，如果有的话
+    if (chatContainer.dataset.initialHeight) {
+        chatContainer.style.height = `${chatContainer.dataset.initialHeight}px`;
+    } else {
+        // 如果没有初始高度，则调用完整的调整函数
+        adjustChatContainerHeight();
+    }
 }
 
 async function updateChatUI(id, historyData) {
@@ -896,10 +1317,12 @@ async function updateChatUI(id, historyData) {
             aiMessageElementOnCopy.className = "message copy ai-message";
             aiMessageElementOnCopy.style.display = "none";
 
+            let aiText = "";
             content.parts.forEach(part => {
                 if (part.text) {
                     messageElement.innerHTML += marked.parse(part.text);
                     aiMessageElementOnCopy.textContent += part.text;
+                    aiText += part.text;
                 }
                 if (part.inlineData) {
                     const container = document.createElement("div");
@@ -917,7 +1340,9 @@ async function updateChatUI(id, historyData) {
 
             chatContainer.scrollTop = chatContainer.scrollHeight;
             conversationContainer.appendChild(messageElement);
-            addButtons(messageElement, aiMessageElementOnCopy, lastUserMessage);
+
+            // 使用新的按钮添加方式
+            addActionButtons(messageElement, aiText);
         }
         chatContainer.appendChild(conversationContainer);
     });
@@ -927,6 +1352,9 @@ async function updateChatUI(id, historyData) {
 
     // 启用代码块复制功能
     enableCodeCopy();
+
+    // 调整聊天容器高度
+    adjustChatContainerHeight();
 }
 
 function fileUI(container, part, mimeType) {
@@ -938,102 +1366,114 @@ function fileUI(container, part, mimeType) {
         const img = document.createElement("img");
         img.src = `data:${mimeType};base64,${part.data}`;
         img.className = "image-thumbnail";
-        img.style.maxWidth = "200px";
-        img.style.maxHeight = "200px";
-        img.style.cursor = "pointer";
-
+        img.alt = "Image preview";
+        img.loading = "lazy"; // 延迟加载
         img.onclick = () => createMediaModal(img.src, 'image');
+
         imgContainer.appendChild(img);
         container.appendChild(imgContainer);
     } else if (mimeType.startsWith('video/')) {
         // Handle videos
+        const videoContainer = document.createElement("div");
+        videoContainer.className = "video-container";
+        videoContainer.style.maxWidth = "300px";
+        videoContainer.style.margin = "10px 0";
+
         const video = document.createElement("video");
         video.src = `data:${mimeType};base64,${part.data}`;
         video.controls = true;
-        video.style.maxWidth = "300px";
+        video.style.width = "100%";
+        video.style.borderRadius = "8px";
+        video.style.border = "1px solid var(--border-color)";
+        video.style.backgroundColor = "rgba(0, 0, 0, 0.1)";
         video.style.cursor = "pointer";
-        video.onclick = () => createMediaModal(video.src, 'video');
-        container.appendChild(video);
+        video.onclick = (e) => {
+            // 点击视频但不是控制按钮时，打开模态框
+            if (e.target === video) {
+                createMediaModal(video.src, 'video');
+            }
+        };
+
+        videoContainer.appendChild(video);
+        container.appendChild(videoContainer);
     } else if (mimeType.startsWith('audio/')) {
         // Handle audio
+        const audioContainer = document.createElement("div");
+        audioContainer.className = "audio-container";
+        audioContainer.style.margin = "10px 0";
+        audioContainer.style.padding = "10px";
+        audioContainer.style.borderRadius = "8px";
+        audioContainer.style.border = "1px solid var(--border-color)";
+        audioContainer.style.backgroundColor = "rgba(0, 0, 0, 0.03)";
+
+        const audioIcon = document.createElement("i");
+        audioIcon.className = "fas fa-music";
+        audioIcon.style.marginRight = "10px";
+        audioIcon.style.color = "var(--text-color)";
+
         const audio = document.createElement("audio");
         audio.src = `data:${mimeType};base64,${part.data}`;
         audio.controls = true;
-        container.appendChild(audio);
+        audio.style.width = "calc(100% - 30px)";
+
+        audioContainer.appendChild(audioIcon);
+        audioContainer.appendChild(audio);
+        container.appendChild(audioContainer);
     } else if (mimeType.startsWith('text/') || mimeType === 'application/pdf') {
         // Handle text files and PDFs
-        const linkContainer = document.createElement("div");
-        linkContainer.style.display = "flex";
-        linkContainer.style.alignItems = "center";
-        linkContainer.style.backgroundColor = "var(--message-bg-color)";
-        linkContainer.style.padding = "8px 12px";
-        linkContainer.style.borderRadius = "6px";
-        linkContainer.style.border = "1px solid var(--border-color)";
+        const fileContainer = document.createElement("div");
+        fileContainer.className = "file-link-container";
 
         const fileIcon = document.createElement("i");
         fileIcon.className = getFileIcon(mimeType);
-        fileIcon.style.marginRight = "15px";
-        fileIcon.style.fontSize = "18px";
-        fileIcon.style.color = "var(--text-color)";
+
+        const fileName = document.createElement("span");
+        fileName.textContent = getFileType(mimeType);
+        fileName.style.marginRight = "auto";
+
+        const buttonsContainer = document.createElement("div");
+        buttonsContainer.style.display = "flex";
 
         const previewButton = document.createElement("button");
-        previewButton.textContent = "预览";
-        previewButton.style.padding = "6px 12px";
-        previewButton.style.marginRight = "12px";
-        previewButton.style.backgroundColor = "var(--ai-message-bg-color)";
-        previewButton.style.color = "var(--text-color)";
-        previewButton.style.border = "1px solid var(--border-color)";
-        previewButton.style.borderRadius = "4px";
-        previewButton.style.cursor = "pointer";
-        previewButton.style.transition = "all 0.2s ease";
+        previewButton.className = "file-preview-btn";
+        previewButton.innerHTML = '<i class="far fa-eye"></i> 预览';
         previewButton.onclick = () => createDocumentModal(part.data, mimeType);
 
         const downloadLink = document.createElement("a");
         downloadLink.href = `data:${mimeType};base64,${part.data}`;
-        downloadLink.download = "document";
-        downloadLink.textContent = "下载";
-        downloadLink.style.padding = "6px 12px";
-        downloadLink.style.backgroundColor = "var(--ai-message-bg-color)";
-        downloadLink.style.color = "var(--text-color)";
-        downloadLink.style.border = "1px solid var(--border-color)";
-        downloadLink.style.borderRadius = "4px";
-        downloadLink.style.transition = "all 0.2s ease";
+        downloadLink.download = `file.${getFileType(mimeType).toLowerCase()}`;
+        downloadLink.className = "file-download-btn";
+        downloadLink.innerHTML = '<i class="fas fa-download"></i> 下载';
 
-        // Add hover effects
-        previewButton.onmouseover = () => {
-            previewButton.style.backgroundColor = "var(--history-hover-bg-color)";
-        };
-        previewButton.onmouseout = () => {
-            previewButton.style.backgroundColor = "var(--ai-message-bg-color)";
-        };
+        buttonsContainer.appendChild(previewButton);
+        buttonsContainer.appendChild(downloadLink);
 
-        downloadLink.onmouseover = () => {
-            downloadLink.style.backgroundColor = "rgba(0, 123, 255, 0.2)";
-        };
-        downloadLink.onmouseout = () => {
-            downloadLink.style.backgroundColor = "rgba(0, 123, 255, 0.1)";
-        };
-
-        linkContainer.appendChild(fileIcon);
-        linkContainer.appendChild(previewButton);
-        linkContainer.appendChild(downloadLink);
-        container.appendChild(linkContainer);
+        fileContainer.appendChild(fileIcon);
+        fileContainer.appendChild(fileName);
+        fileContainer.appendChild(buttonsContainer);
+        container.appendChild(fileContainer);
     } else {
         // Handle other files with download only
-        const fileLink = document.createElement("a");
-        fileLink.href = `data:${mimeType};base64,${part.data}`;
-        fileLink.download = "document";
+        const fileContainer = document.createElement("div");
+        fileContainer.className = "file-link-container";
 
         const fileIcon = document.createElement("i");
         fileIcon.className = getFileIcon(mimeType);
-        fileIcon.style.marginRight = "10px";
 
         const fileName = document.createElement("span");
         fileName.textContent = getFileType(mimeType);
+        fileName.style.marginRight = "auto";
 
-        fileLink.appendChild(fileIcon);
-        fileLink.appendChild(fileName);
-        container.appendChild(fileLink);
+        const downloadLink = document.createElement("a");
+        downloadLink.href = `data:${mimeType};base64,${part.data}`;
+        downloadLink.download = `file.${getFileType(mimeType).toLowerCase()}`;
+        downloadLink.className = "file-download-btn";
+        downloadLink.innerHTML = '<i class="fas fa-download"></i> 下载';
+
+        fileContainer.appendChild(fileIcon);
+        fileContainer.appendChild(fileName);
+        fileContainer.appendChild(downloadLink);
+        container.appendChild(fileContainer);
     }
 }
 
@@ -1050,6 +1490,20 @@ function createMediaModal(src, type) {
     modal.style.alignItems = "center";
     modal.style.zIndex = "1000";
 
+    // 添加关闭按钮
+    const closeButton = document.createElement("button");
+    closeButton.innerHTML = "×";
+    closeButton.style.position = "absolute";
+    closeButton.style.top = "20px";
+    closeButton.style.right = "20px";
+    closeButton.style.backgroundColor = "transparent";
+    closeButton.style.border = "none";
+    closeButton.style.color = "white";
+    closeButton.style.fontSize = "30px";
+    closeButton.style.cursor = "pointer";
+    closeButton.style.zIndex = "1001";
+    closeButton.onclick = () => modal.remove();
+
     const mediaElement = type === 'image'
         ? document.createElement("img")
         : document.createElement("video");
@@ -1058,11 +1512,14 @@ function createMediaModal(src, type) {
     mediaElement.style.maxWidth = "90%";
     mediaElement.style.maxHeight = "90vh";
     mediaElement.style.objectFit = "contain";
+    mediaElement.style.borderRadius = "4px";
+    mediaElement.style.boxShadow = "0 0 20px rgba(0,0,0,0.5)";
 
     if (type === 'video') {
         mediaElement.controls = true;
     }
 
+    modal.appendChild(closeButton);
     modal.appendChild(mediaElement);
     document.body.appendChild(modal);
 
@@ -1071,33 +1528,6 @@ function createMediaModal(src, type) {
             modal.remove();
         }
     };
-}
-
-function getFileIcon(mimeType) {
-    switch (true) {
-        case mimeType.includes('pdf'):
-            return 'far fa-file-pdf';
-        case mimeType.includes('javascript'):
-            return 'far fa-file-code';
-        case mimeType.includes('python'):
-            return 'fab fa-python';
-        case mimeType.includes('text'):
-            return 'far fa-file-alt';
-        case mimeType.includes('html'):
-            return 'far fa-file-code';
-        case mimeType.includes('css'):
-            return 'far fa-file-code';
-        case mimeType.includes('csv'):
-            return 'far fa-file-excel';
-        case mimeType.includes('xml'):
-            return 'far fa-file-code';
-        default:
-            return 'far fa-file';
-    }
-}
-
-function getFileType(mimeType) {
-    return mimeType.split('/')[1].toUpperCase();
 }
 
 function createDocumentModal(base64Data, mimeType) {
@@ -1113,28 +1543,48 @@ function createDocumentModal(base64Data, mimeType) {
     modal.style.alignItems = "center";
     modal.style.zIndex = "1000";
 
+    // 添加关闭按钮
+    const closeButton = document.createElement("button");
+    closeButton.innerHTML = "×";
+    closeButton.style.position = "absolute";
+    closeButton.style.top = "20px";
+    closeButton.style.right = "20px";
+    closeButton.style.backgroundColor = "transparent";
+    closeButton.style.border = "none";
+    closeButton.style.color = "white";
+    closeButton.style.fontSize = "30px";
+    closeButton.style.cursor = "pointer";
+    closeButton.style.zIndex = "1001";
+    closeButton.onclick = () => modal.remove();
+
     const isDarkTheme = localStorage.getItem('theme') === 'dark-theme';
 
     if (mimeType === 'application/pdf') {
         const iframe = document.createElement("iframe");
         iframe.src = `data:${mimeType};base64,${base64Data}`;
-        iframe.style.width = "70%";
-        iframe.style.height = "70%";
+        iframe.style.width = "80%";
+        iframe.style.height = "80%";
         iframe.style.border = "none";
+        iframe.style.borderRadius = "8px";
+        iframe.style.backgroundColor = "white";
+        iframe.style.boxShadow = "0 0 20px rgba(0,0,0,0.5)";
         modal.appendChild(iframe);
     } else {
         const textContainer = document.createElement("div");
         textContainer.style.backgroundColor = isDarkTheme ? '#2d2d2d' : 'white';
         textContainer.style.color = isDarkTheme ? '#e0e0e0' : 'black';
         textContainer.style.padding = "20px";
-        textContainer.style.width = "60%";
-        textContainer.style.height = "60%";
+        textContainer.style.width = "70%";
+        textContainer.style.height = "70%";
         textContainer.style.overflowY = "auto";
         textContainer.style.whiteSpace = "pre-wrap";
         textContainer.style.borderRadius = "8px";
         textContainer.style.boxShadow = isDarkTheme ?
             "0 4px 6px rgba(0, 0, 0, 0.5)" :
             "0 4px 6px rgba(0, 0, 0, 0.1)";
+        textContainer.style.fontFamily = "monospace";
+        textContainer.style.fontSize = "14px";
+        textContainer.style.lineHeight = "1.5";
 
         // 正确解码UTF-8编码的base64文本
         const binary = atob(base64Data);
@@ -1147,13 +1597,14 @@ function createDocumentModal(base64Data, mimeType) {
         modal.appendChild(textContainer);
     }
 
+    modal.appendChild(closeButton);
+    document.body.appendChild(modal);
+
     modal.onclick = (e) => {
         if (e.target === modal) {
             modal.remove();
         }
     };
-
-    document.body.appendChild(modal);
 }
 
 async function loadHistoryById(id, title) {
@@ -1188,8 +1639,16 @@ async function loadHistoryById(id, title) {
         // 在历史记录中添加高亮效果
         highlightActiveHistory(id);
 
+        // 在完成加载后调整高度
+        setTimeout(() => {
+            adjustChatContainerHeight();
+            scrollToBottom(document.getElementById("chat-container"));
+        }, 200);
+
+        return true;
     } catch (error) {
-        console.error("加载历史记录时出错:", error);
+        console.error("Failed to load history:", error);
+        return false;
     }
 }
 
@@ -1264,7 +1723,7 @@ function updateHistoryList(historyData) {
             });
             li.appendChild(moreButton);
 
-            // 显示标题或“无消息”，并固定长度为40个字符
+            // 显示标题或"无消息"，并固定长度为40个字符
             const titleSpan = document.createElement("span");
             while (Array.from(item.title.replace(/\n/g, "")).length < 40) {
                 item.title += ' ';
@@ -1381,7 +1840,7 @@ function startNewConversation() {
     }
     uploadedFiles = []; // 清空全局文件数组
 
-    chatContainer.style.display = "none";
+    // chatContainer.style.display = "none";
     console.log("Conversation reset successfully.");
 }
 
@@ -1558,4 +2017,36 @@ async function exportToPDF() {
 
     // 使用标题作为文件名
     pdf.save(`${title}.pdf`);
+}
+
+function getFileIcon(mimeType) {
+    if (mimeType.startsWith('image/')) {
+        return 'far fa-file-image';
+    } else if (mimeType.startsWith('video/')) {
+        return 'far fa-file-video';
+    } else if (mimeType.startsWith('audio/')) {
+        return 'far fa-file-audio';
+    } else if (mimeType === 'application/pdf') {
+        return 'far fa-file-pdf';
+    } else if (mimeType.includes('word') || mimeType === 'application/msword' || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        return 'far fa-file-word';
+    } else if (mimeType.includes('excel') || mimeType === 'application/vnd.ms-excel' || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+        return 'far fa-file-excel';
+    } else if (mimeType.includes('powerpoint') || mimeType === 'application/vnd.ms-powerpoint' || mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+        return 'far fa-file-powerpoint';
+    } else if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed') {
+        return 'far fa-file-archive';
+    } else if (mimeType === 'text/plain') {
+        return 'far fa-file-alt';
+    } else if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') {
+        return 'far fa-file-code';
+    } else if (mimeType.includes('javascript') || mimeType.includes('json') || mimeType.includes('xml') || mimeType.includes('css')) {
+        return 'far fa-file-code';
+    } else {
+        return 'far fa-file';
+    }
+}
+
+function getFileType(mimeType) {
+    return mimeType.split('/')[1].toUpperCase();
 }
