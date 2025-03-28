@@ -3,6 +3,7 @@ package configuration
 import (
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
 	"net/http"
@@ -120,6 +121,13 @@ func InitHistoryDir() error {
 		stmt string
 	}{
 		{
+			"key",
+			`CREATE TABLE IF NOT EXISTS key (
+    			id INTEGER PRIMARY KEY AUTOINCREMENT,
+    			encrypted_value TEXT NOT NULL
+			);`,
+		},
+		{
 			"session",
 			`CREATE TABLE IF NOT EXISTS session (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -170,7 +178,13 @@ func InitHistoryDir() error {
 // BuildAIApi 构建AI接口
 func BuildAIApi(DefaultModel, ContentType string) string {
 	if GeminiApiKey == "" {
-		GeminiApiKey = EnvMap["GEMINI_API_KEY"]
+		row := DB.QueryRow("SELECT encrypted_value FROM key where id = 1")
+		err := row.Scan(&GeminiApiKey)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				GeminiApiKey = EnvMap["GEMINI_API_KEY"]
+			}
+		}
 	}
 	GeminiBaseURL := EnvMap["BASE_GOOGLE_AI"]
 	modelMap := map[string]string{

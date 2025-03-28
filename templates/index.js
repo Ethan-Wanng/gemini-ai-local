@@ -83,10 +83,14 @@ async function setSessionID() {
     }
 }
 
-let selectedModel = "gemini-2.0-flash"; // 默认模型
+// Get initial model value from select element
+const modelSelect = document.getElementById("model-select");
+let selectedModel = modelSelect ? modelSelect.value : "gemini-2.0-flash";
 
 function changeModel() {
     const modelSelect = document.getElementById("model-select");
+    if (!modelSelect) return;
+
     selectedModel = modelSelect.value;
     console.log("Selected model:", selectedModel);
 
@@ -96,16 +100,16 @@ function changeModel() {
         .then(response => {
             if (!response.ok) {
                 console.error("Failed to switch model:", response.status);
-                // 回退到默认选项（列表的第一个）
-                modelSelect.value = modelSelect.options[0].value;
+                // Revert to previous selection
+                modelSelect.value = selectedModel;
                 return;
             }
             console.log("Model switched successfully");
         })
         .catch(error => {
             console.error("Error switching model:", error);
-            // 发生错误时，回退到第一个选项
-            modelSelect.value = modelSelect.options[0].value;
+            // Revert to previous selection
+            modelSelect.value = selectedModel;
         });
 }
 
@@ -127,14 +131,17 @@ function handleFiles(files) {
     const fileInput = document.getElementById("file-input");
 
     if (files.length === 0) {
-        // Check if chatContainer has any text content before hiding
-        const hasContent = Array.from(chatContainer.querySelectorAll('.conversation .user-message')).some(node =>
-            (node.textContent || '').trim().length > 0
-        );
-        if (!hasContent) {
-            chatContainer.style.display = "none";
+        // 如果文件列表为空（无论是初始状态还是删除后）
+        if (uploadedInfoDiv) {
+            // 如果文件预览区域存在，则清空内容并隐藏它
+            uploadedInfoDiv.innerHTML = '';
+            uploadedInfoDiv.style.display = "none";
         }
-        uploadedInfoDiv.style.display = "none"; // Hide the div when no files
+        // 直接返回，不再检查 hasContent 或隐藏 chatContainer
+        // 确保全局 uploadedFiles 也同步清空
+        uploadedFiles = [];
+        // (可选) 清理文件输入控件的值，虽然 DataTransfer 会处理，但以防万一
+        if (fileInput) fileInput.value = "";
         return;
     }
 
@@ -365,22 +372,17 @@ function formatFileSize(size) {
 let originalHeight = ""
 
 async function sendMessage(isReply) {
-    console.log("发送消息，isReply:", isReply); // 添加调试日志
-
     const inputField = document.getElementById("user-input");
     const chatContainer = document.getElementById("chat-container");
     const fileInput = document.getElementById("file-input");
     const uploadedFilesInfo = document.getElementById("uploaded-files-info");
 
     const userMessage = inputField.value.trim();
-    console.log("用户消息内容:", userMessage); // 添加调试日志
 
     // 从inputField的dataset中获取content_id（如果存在）
     const content_id = parseInt(inputField.dataset.content_id || "0");
-    console.log("content_id:", content_id); // 添加调试日志
 
     if (!userMessage) {
-        console.log("用户消息为空，不发送");
         return;
     }
 
@@ -394,7 +396,6 @@ async function sendMessage(isReply) {
 
     // Process images if files exist
     if (files && files.length > 0) {
-        console.log("处理文件数量:", files.length); // 添加调试日志
 
         const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0);
         const maxSize = 200 * 1024 * 1024; // 200MB in bytes
@@ -465,11 +466,11 @@ async function sendMessage(isReply) {
         inputField.dataset.content_id = "";
     }
 
+    changeModel()
+
     try {
         let sessionId = getSessionId();
         let flag = !sessionId;
-
-        console.log("发送请求到服务器，sessionId:", sessionId, "isReply:", isReply); // 添加调试日志
 
         const chatResponse = await fetchChatResponse(userMessage, sessionId, content_id, fileBase64s, isReply);
         if (!chatResponse.ok) {
@@ -534,16 +535,14 @@ function createConversationContainer(userMessage, fileBase64s = []) {
     messageWrapper.appendChild(editButton);
     userMessageElement.appendChild(messageWrapper);
 
-    // Handle media files
     if (fileBase64s.length > 0) {
         const filesContainer = document.createElement("div");
         filesContainer.className = "files-container";
 
-        fileBase64s.forEach(file => {
-            const container = document.createElement("div");
-            container.className = "file-container";
-            fileUI(container, file, file.mimeType);
-            filesContainer.appendChild(container);
+        // 直接遍历原始的 fileBase64s 数组
+        fileBase64s.forEach(file => { // <--- 使用 fileBase64s 而不是 sortedFiles
+            const mimeType = file.mimeType || file.type; // 注意: sendMessage 中用的是 mimeType，这里统一一下
+            fileUI(filesContainer, file, mimeType);
         });
 
         userMessageElement.appendChild(filesContainer);
@@ -572,37 +571,6 @@ function editMessage(messageElement, originalText, originalFiles = []) {
     fileInput.multiple = true;
     fileInput.className = "edit-file-input";
 
-    // Create file preview area
-    const filePreview = document.createElement("div");
-    filePreview.className = "edit-file-preview";
-
-    // Add original files to preview
-    // Add original files to preview
-    if (originalFiles.length > 0) {
-        originalFiles.forEach((file, index) => {
-            const fileContainer = document.createElement("div");
-            fileContainer.className = "file-container";
-            fileContainer.style.position = "relative";
-
-            // Add delete button
-            const deleteBtn = document.createElement("button");
-            deleteBtn.className = "file-delete-btn";
-            deleteBtn.innerHTML = "×";
-            deleteBtn.style.position = "absolute";
-            deleteBtn.style.right = "5px";
-            deleteBtn.style.top = "5px";
-            deleteBtn.style.zIndex = "1";
-            deleteBtn.onclick = () => {
-                originalFiles.splice(index, 1);
-                fileContainer.remove();
-            };
-
-            fileUI(fileContainer, file, file.mimeType);
-            fileContainer.appendChild(deleteBtn);
-            filePreview.appendChild(fileContainer);
-        });
-    }
-
     // Create buttons container
     const buttonsContainer = document.createElement("div");
     buttonsContainer.className = "edit-buttons";
@@ -612,8 +580,8 @@ function editMessage(messageElement, originalText, originalFiles = []) {
     saveButton.className = "save-edit-btn";
     saveButton.textContent = "提交";
     saveButton.onclick = async () => {
-        // Handle new files from the file input
-        const newFiles = await handleFileInput(fileInput);
+        // Get the chat container for scrolling
+        const chatContainer = document.getElementById("chat-container");
 
         // Set the input field value and prepare file handling
         const inputField = document.getElementById("user-input");
@@ -623,10 +591,11 @@ function editMessage(messageElement, originalText, originalFiles = []) {
         const conversation = messageElement.closest('.conversation');
         inputField.dataset.content_id = conversation ? conversation.dataset.content_id : null;
 
-        // Create a DataTransfer object to handle files
+        // Handle files
+        const newFiles = await handleFileInput(fileInput);
         const dt = new DataTransfer();
 
-        // Add existing files that are already in base64 format
+        // Add existing files
         if (originalFiles && originalFiles.length > 0) {
             originalFiles.forEach(file => {
                 const blob = base64ToBlob(file.data, file.mimeType);
@@ -635,7 +604,7 @@ function editMessage(messageElement, originalText, originalFiles = []) {
             });
         }
 
-        // Add new files from file input
+        // Add new files
         if (newFiles.length > 0) {
             newFiles.forEach(file => {
                 const blob = base64ToBlob(file.data, file.mimeType);
@@ -644,11 +613,18 @@ function editMessage(messageElement, originalText, originalFiles = []) {
             });
         }
 
-        // Set the combined files to the global file input
+        // Set combined files to global file input
         document.getElementById("file-input").files = dt.files;
 
-        await sendMessage(true);
+        // Remove edit container before sending message
         editContainer.remove();
+
+        // Enable auto-scroll
+        autoScroll = true;
+
+        // Send message and scroll to bottom
+        await sendMessage(true);
+        scrollToBottom(chatContainer);
     };
 
     // Cancel button
@@ -656,18 +632,16 @@ function editMessage(messageElement, originalText, originalFiles = []) {
     cancelButton.className = "cancel-edit-btn";
     cancelButton.textContent = "取消";
     cancelButton.onclick = () => {
-        messageElement.innerHTML = ''; // Clear current content
-        updateMessage(messageElement, originalText, originalFiles); // Restore original content
+        messageElement.innerHTML = '';
+        updateMessage(messageElement, originalText, originalFiles);
         editContainer.remove();
     };
 
+    // Assemble edit container components
     buttonsContainer.appendChild(saveButton);
     buttonsContainer.appendChild(cancelButton);
-
-    // Assemble edit container
     editContainer.appendChild(textarea);
     editContainer.appendChild(fileInput);
-    editContainer.appendChild(filePreview);
     editContainer.appendChild(buttonsContainer);
 
     // Replace original content with edit container
@@ -731,14 +705,6 @@ async function handleFileInput(fileInput) {
 }
 
 async function fetchChatResponse(userMessage, sessionId, content_id, fileBase64s, isReply) {
-    console.log("发送请求参数:", {
-        message: userMessage,
-        session_id: sessionId,
-        content_id: content_id,
-        files_count: fileBase64s.length,
-        is_reply: isReply
-    });
-
     return fetch("/chat", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -984,15 +950,13 @@ function addActionButtons(aiMessageElement, messageText) {
     // 创建重新回答按钮
     const reanswer = document.createElement("button");
     reanswer.className = "reanswer-btn";
-    reanswer.innerHTML = '<i class="fas fa-redo-alt"></i> 重新回答';
+    reanswer.innerHTML = '<i class="fas fa-redo-alt"></i>';
     reanswer.onclick = function (e) {
         if (e) {
             e.preventDefault();
             e.stopPropagation();
         }
-
-        console.log("点击了重新回答按钮");
-
+        scrollToBottom(document.getElementById("chat-container"));
         try {
             // 获取当前聊天窗口
             const conversationContainer = aiMessageElement.closest('.conversation');
@@ -1020,7 +984,6 @@ function addActionButtons(aiMessageElement, messageText) {
             let userMessageText = "";
             if (messageTextElement) {
                 userMessageText = messageTextElement.textContent.trim();
-                console.log("获取到用户消息:", userMessageText);
             } else {
                 console.error("找不到消息文本元素");
                 return;
@@ -1028,7 +991,6 @@ function addActionButtons(aiMessageElement, messageText) {
 
             // 获取content_id
             const content_id = previousConversation.dataset.content_id;
-            console.log("获取到content_id:", content_id);
 
             // 设置输入字段
             const userInput = document.getElementById("user-input");
@@ -1046,11 +1008,9 @@ function addActionButtons(aiMessageElement, messageText) {
             const fileInput = document.getElementById("file-input");
 
             if (fileContainers && fileContainers.length > 0) {
-                console.log("找到文件容器数量:", fileContainers.length);
                 const dataTransfer = new DataTransfer();
 
                 fileContainers.forEach((container, index) => {
-                    console.log(`处理第${index + 1}个文件`);
 
                     // 检查媒体元素
                     const mediaElement = container.querySelector('img, video, audio');
@@ -1091,7 +1051,6 @@ function addActionButtons(aiMessageElement, messageText) {
 
                 // 设置文件输入
                 if (dataTransfer.files.length > 0) {
-                    console.log("设置文件输入，文件数量:", dataTransfer.files.length);
                     fileInput.files = dataTransfer.files;
                     // 更新全局uploadedFiles
                     uploadedFiles = Array.from(dataTransfer.files);
@@ -1101,13 +1060,10 @@ function addActionButtons(aiMessageElement, messageText) {
             }
 
             // 删除当前对话容器
-            console.log("移除对话容器");
             conversationContainer.remove();
 
             // 调用发送消息函数
-            console.log("调用sendMessage函数");
             sendMessage(true);
-
         } catch (error) {
             console.error("重新回答时发生错误:", error);
         }
@@ -1116,7 +1072,7 @@ function addActionButtons(aiMessageElement, messageText) {
     // 创建复制对话内容按钮
     const copyContent = document.createElement("button");
     copyContent.className = "copy-content-btn";
-    copyContent.innerHTML = '<i class="fas fa-copy"></i> 复制内容';
+    copyContent.innerHTML = '<i class="fas fa-copy"></i>';
     copyContent.onclick = function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -1210,7 +1166,7 @@ function adjustTextareaHeight(textarea) {
 
     // 调整高度
     textareaElement.style.height = '5px';
-    const scrollHeight = textareaElement.scrollHeight - 20; // 稍微减少边距调整
+    const scrollHeight = textareaElement.scrollHeight; // 稍微减少边距调整
     const maxHeight = 200; // 增加最大高度从120px到200px
     textareaElement.style.height = Math.min(scrollHeight, maxHeight) + 'px';
     textareaElement.style.overflowY = scrollHeight > maxHeight ? 'scroll' : 'hidden';
@@ -1218,29 +1174,6 @@ function adjustTextareaHeight(textarea) {
     // 调整文本区域高度后，也调整聊天容器的高度
     setTimeout(maintainChatHeight, 0);
 }
-
-// function adjustTextareaHeight(textarea) {
-//     // If no textarea is provided, get the default one
-//     const textareaElement = textarea || document.getElementById("user-input");
-//     if (!textareaElement) return;
-//
-//     // Reset height to auto to get proper scrollHeight
-//     textareaElement.style.height = 'auto';
-//
-//     // Calculate new height
-//     const scrollHeight = textareaElement.scrollHeight;
-//     const maxHeight = 200; // Maximum height in pixels
-//
-//     // Set new height with limits
-//     const newHeight = Math.min(Math.max(40, scrollHeight), maxHeight);
-//     textareaElement.style.height = newHeight + 'px';
-//
-//     // Show scrollbar if content exceeds max height
-//     textareaElement.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
-//
-//     // Adjust chat container height
-//     adjustChatContainerHeight();
-// }
 
 // 聊天容器高度维护函数
 function maintainChatHeight() {
@@ -1690,7 +1623,7 @@ function updateHistoryList(historyData) {
 
                 const menu = document.createElement("div");
                 menu.style.position = "absolute";
-                menu.style.backgroundColor = "#fff";
+                menu.style.backgroundColor = "#1a1a2a";
                 menu.style.border = "1px solid #ccc";
                 menu.style.padding = "10px";
                 menu.style.zIndex = "1000";

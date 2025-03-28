@@ -43,7 +43,9 @@
     <div id="chat-area">
         <div id="chat-container"></div>
         <!-- 滚动到底部按钮 -->
-        <button id="scroll-to-bottom" title="滚动到底部"><i class="fas fa-arrow-down"></i></button>
+        <button class="scroll-to-bottom-btn" id="scroll-to-bottom" onclick="scrollToBottom()" title="滚动到底部">
+            <i class="fas fa-arrow-down"></i>
+        </button>
         <div id="input-container">
             <button id="new-conversation-button" onclick="startNewConversation()" title="新对话">
                 <i class="fas fa-comment-dots"></i>
@@ -53,8 +55,11 @@
             </label>
             <input id="file-input" multiple onchange="handleFiles(this.files)" style="display: none;" type="file">
             <div id="fileInfo" style="display: none"></div>
-            <textarea id="user-input" oninput="adjustTextareaHeight()" onpaste="handlePaste(event)"
-                      placeholder="在这里输入您的问题或粘贴文件内容..."></textarea>
+            <textarea id="user-input"
+                      oninput="adjustTextareaHeight()"
+                      onpaste="handlePaste(event)"
+                      placeholder="在这里输入您的问题或粘贴文件内容..."
+                      style="height: 44px"></textarea>
             <button id="send-button" onclick="sendMessage(false)">
                 <i class="fas fa-paper-plane"></i>
             </button>

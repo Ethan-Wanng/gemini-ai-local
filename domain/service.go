@@ -719,3 +719,25 @@ func EditHistoryTitle(db *sql.DB, sessionID int64, title string) error {
 	}
 	return nil
 }
+
+func SaveKey(key string) error {
+	// 1. 检查数据库连接池是否有效
+	db := configuration.DB
+
+	// 2. 准备 SQL 语句 (使用 REPLACE INTO)
+	// REPLACE INTO 的工作方式：
+	// - 如果表中已存在具有相同主键 (key_name) 的行，它会先删除旧行，然后插入新行。
+	// - 如果不存在，它就直接插入新行。
+	stmt := `REPLACE INTO key (encrypted_value) VALUES (?)`
+
+	// 4. 执行 SQL 语句
+	_, err := db.Exec(stmt, key)
+	if err != nil {
+		log.Printf("错误：执行数据库保存 API Key 时失败: %v", err)
+		return fmt.Errorf("保存 API Key 到数据库失败: %w", err)
+	}
+
+	// 5. 保存成功
+	log.Printf("API Key 已成功加密并保存（或更新）到数据库。")
+	return nil
+}

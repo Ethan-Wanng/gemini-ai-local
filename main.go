@@ -14,13 +14,14 @@ import (
 	"github.com/Dreamacro/clash/hub/executor"
 	"github.com/Dreamacro/clash/hub/route"
 	clog "github.com/Dreamacro/clash/log"
+	"github.com/gen2brain/dlgs"
 	"github.com/getlantern/systray"
 	"github.com/joho/godotenv"
 	"github.com/lxn/walk"
-	"github.com/lxn/walk/declarative"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/skratchdot/open-golang/open"
 	"github.com/wangArtsoar/gemini-ai/configuration"
+	"github.com/wangArtsoar/gemini-ai/domain"
 	"github.com/wangArtsoar/gemini-ai/gemini_util"
 	"github.com/wangArtsoar/gemini-ai/router"
 	"log"
@@ -42,8 +43,8 @@ var fs embed.FS
 var selectedDescription = fmt.Sprintln(fmt.Sprint(`使用的AI : Google Gemini
 作者 : xiaoyi
 编程语言 : Go、JS
-
 本程序仅作为学习探讨
+项目地址: https://github.com/wangArtsoar/gemini-ai-local
 	`))
 
 func init() {
@@ -118,9 +119,6 @@ func init() {
 		return
 	}
 
-	configuration.Fs = &fs
-	configuration.AIApi = configuration.BuildAIApi("", "")
-
 	if err = configuration.InitializeDBPool(configuration.DbPath); err != nil {
 		initErr = fmt.Errorf("初始化数据库连接池失败: %w", err)
 		return
@@ -130,6 +128,9 @@ func init() {
 		initErr = fmt.Errorf("验证Google访问失败: %w", err)
 		return
 	}
+
+	configuration.Fs = &fs
+	configuration.AIApi = configuration.BuildAIApi("", "")
 
 	if configuration.GetKey() {
 		configuration.GeminiApiKey, err = gemini_util.Util{}.Decrypt(configuration.GeminiApiKey)
@@ -177,76 +178,50 @@ func showProjectDescription() {
 	}
 }
 
-// TODO
-// 配置API密钥的函数
+// 配置API密钥的函数 (使用 dlgs 库)
 func configAPIKey() {
-	var result string
-	var dlg *walk.Dialog
-	var acceptPB, cancelPB *walk.PushButton
-	var inputEdit *walk.LineEdit
+	// 调用 dlgs.Entry 显示输入对话框
+	// 参数：标题, 消息文本, 默认值
+	apiKeyInput, ok, err := dlgs.Entry("配置 Gemini API 密钥", "请输入您的 Gemini API Key:", "")
 
-	// 定义一个简单的对话框
-	dialog := declarative.Dialog{
-		AssignTo: &dlg, // 绑定 Dialog
-		Title:    "请输入内容",
-		MinSize:  declarative.Size{Width: 250, Height: 120},
-		Layout:   declarative.VBox{}, // 垂直布局
-		Children: []declarative.Widget{
-			// 输入框
-			declarative.LineEdit{
-				AssignTo: &inputEdit,
-			},
-			// 按钮
-			declarative.Composite{
-				Layout: declarative.HBox{}, // 水平排列按钮
-				Children: []declarative.Widget{
-					declarative.PushButton{
-						AssignTo: &acceptPB,
-						Text:     "确定",
-						OnClicked: func() {
-							result = inputEdit.Text() // 把输入框的文本赋值给 result
-							dlg.Accept()
-						},
-					},
-					declarative.PushButton{
-						AssignTo: &cancelPB,
-						Text:     "取消",
-						OnClicked: func() {
-							dlg.Cancel() // 关闭对话框
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// 运行对话框
-	_, err := dialog.Run(nil)
 	if err != nil {
-		log.Fatal(err)
+		// 处理显示对话框时发生的错误
+		log.Printf("显示输入对话框失败: %v", err)
+		dlgs.Error("错误", "无法打开配置窗口: "+err.Error()) // 使用 dlgs 显示错误
+		return
 	}
 
-	// 加密密钥
+	if !ok {
+		return
+	}
+
+	// 检查输入是否为空 (dlgs 本身可能允许空提交，需要手动检查)
+	apiKeyInput = strings.TrimSpace(apiKeyInput)
+	if apiKeyInput == "" {
+		dlgs.Warning("提示", "API Key 不能为空。") // 使用 dlgs 显示警告
+		// 可以选择再次调用 configAPIKey() 让用户重新输入，或者直接返回
+		configAPIKey() // 重新调用
+		return         // 或者直接退出
+	}
+
+	// --- 加密逻辑 ---
 	util := gemini_util.Util{}
-	encrypted, err := util.Encrypt(result)
+	encrypted, err := util.Encrypt(apiKeyInput)
 	if err != nil {
-		walk.MsgBox(nil, "错误", "加密失败: "+err.Error(), walk.MsgBoxIconError)
+		dlgs.Error("错误", "加密 API Key 失败: "+err.Error()) // 使用 dlgs 显示错误
 		return
 	}
 
-	// 创建配置内容
-	content := fmt.Sprintf("gemini-key: %s", encrypted)
-
-	// 生成唯一文件名
-	filename := fmt.Sprintf("%s/config_%d.example", "", time.Now().Unix())
-
-	// 写入文件
-	if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
-		walk.MsgBox(nil, "错误", "保存配置失败: "+err.Error(), walk.MsgBoxIconError)
-		return
+	// --- 保存逻辑 ---
+	if err = domain.SaveKey(encrypted); err != nil {
+		dlgs.Error("失败", fmt.Sprintf("API密钥保存失败"))
 	}
+	dlgs.Info("成功", fmt.Sprintf("API密钥配置已保存"))
 
-	walk.MsgBox(nil, "成功", "API密钥配置已保存", walk.MsgBoxIconInformation)
+	// 更新内存中的 Key (如果需要)
+	configuration.GeminiApiKey = apiKeyInput
+	// 使用 dlgs 显示提示信息
+	dlgs.Info("提示", "请注意：可能需要重新启动程序或重新加载配置以使新的API密钥生效。")
 }
 
 func onReady() {
@@ -261,7 +236,7 @@ func onReady() {
 
 	// 添加菜单项
 	mOpen := systray.AddMenuItem("打开界面", "打开Web界面")
-	mConfig := systray.AddMenuItem("配置密钥", "配置Gemini API密钥")
+	mConfig := systray.AddMenuItem("配置密钥", "配置Gemini API密钥") // 确保这一行存在
 	mDescription := systray.AddMenuItem("项目简介", "显示项目简介")
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("退出", "关闭应用")
@@ -300,7 +275,7 @@ func onReady() {
 			case <-mOpen.ClickedCh:
 				_ = open.Run(api)
 			case <-mConfig.ClickedCh:
-				configAPIKey()
+				configAPIKey() // 调用修改后的函数
 			case <-mDescription.ClickedCh:
 				showProjectDescription()
 			case <-mQuit.ClickedCh:
