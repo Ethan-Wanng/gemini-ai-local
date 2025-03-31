@@ -137,15 +137,17 @@ func GetSessionTitle(input configuration.UserInput) (*Title, error) {
 		input.Message = input.Message + "\n，请根据这段文字帮我起一个标题，不超过26个字符，直接给出一个，不要添加任何信息，后面不要加换行"
 
 		var str *string
-		for range 3 {
-			str, err = getTitle(input)
-			if err != nil {
-				return nil, err
-			}
+		for i := range 3 {
+			log.Println(i)
+			str = getTitle(input)
 			if str != nil {
 				title.Text = *str
 				break
 			}
+		}
+
+		if str == nil {
+			title.Text = string(runes[:min(14, len(runes))])
 		}
 	}
 
@@ -158,24 +160,24 @@ func GetSessionTitle(input configuration.UserInput) (*Title, error) {
 	return title, nil
 }
 
-func getTitle(input configuration.UserInput) (*string, error) {
+func getTitle(input configuration.UserInput) *string {
 	resp, err := PostRequestOnClient(input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get title from AI: %w", err)
+		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected HTTP status: %d", resp.StatusCode)
+		return nil
 	}
 
 	if resp.Body == nil {
-		return nil, fmt.Errorf("response body is empty")
+		return nil
 	}
 
 	var geminiResponse GeminiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&geminiResponse); err != nil {
-		return nil, fmt.Errorf("error decoding JSON response: %w", err)
+		return nil
 	}
 
 	var str string
@@ -192,7 +194,7 @@ func getTitle(input configuration.UserInput) (*string, error) {
 		}
 		break // 只取第一个候选项
 	}
-	return &str, nil
+	return &str
 }
 
 // Chat 对话

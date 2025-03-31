@@ -439,6 +439,7 @@ async function sendMessage(isReply) {
     chatContainer.style.display = "block";
     const conversationContainer = createConversationContainer(userMessage, fileBase64s);
     chatContainer.appendChild(conversationContainer);
+    scrollToBottom(chatContainer);
 
     if (uploadedFilesInfo) {
         uploadedFilesInfo.innerHTML = ""
@@ -450,8 +451,6 @@ async function sendMessage(isReply) {
 
     // 调整容器高度
     adjustChatContainerHeight();
-
-    scrollToBottom(chatContainer);
 
     // 清空输入字段并重置高度
     inputField.value = ""; // Clear the input field
@@ -813,8 +812,6 @@ async function handleNewSession(userMessage, sessionId) {
     if (!titleResponse.ok) {
         console.error(`Title API error: ${titleResponse.status}`);
         // Use first 40 characters of userMessage as title
-        document.getElementById("conversation-title").textContent = userMessage.slice(0, 40);
-        document.getElementById("conversation-title").style.whiteSpace = "nowrap";
         return;
     }
 
