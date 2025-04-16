@@ -32,6 +32,17 @@ body {
     height: 100vh; /* 使body占满整个视口高度 */
 }
 
+/* 当 body 有 .input-centered 类时，隐藏聊天容器 */
+body.input-centered #chat-container {
+    display: none;
+}
+
+/* 当 body 有 .input-centered 类时，让 #chat-area 垂直居中其内容（即输入框） */
+body.input-centered #chat-area {
+    justify-content: center; /* 垂直居中 */
+    flex: 1; /* 确保 chat-area 占据剩余空间以便居中生效 */
+}
+
 header {
     background-color: var(--header-bg-color);
     color: var(--header-text-color);
@@ -96,7 +107,7 @@ header {
     transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
     margin-bottom: 20px;
     /* 不在这里设置固定高度，我们会在JS中动态计算 */
-    min-height: 100px /* 设置最小高度，防止过小 */
+    min-height: 100px; /* 设置最小高度，防止过小 */
 }
 
 .message {
@@ -529,7 +540,7 @@ th {
     font-weight: 600;
     text-transform: uppercase;
     font-size: 0.85rem;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
 }
 
 tr:nth-child(even) {

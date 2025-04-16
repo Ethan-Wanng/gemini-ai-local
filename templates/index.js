@@ -2,6 +2,24 @@
 let sseReader = null;
 // 标记是否自动滚动
 let autoScroll = true;
+
+// 添加这个新函数
+function updateInputCentering() {
+    const chatContainer = document.getElementById('chat-container');
+    const body = document.body;
+    // 检查聊天容器是否存在，并且是否没有子元素（或者更严格地，没有 .message 元素）
+    const isEmpty = !chatContainer || chatContainer.children.length === 0 || !chatContainer.querySelector('.message');
+
+    if (isEmpty) {
+        body.classList.add('input-centered');
+    } else {
+        body.classList.remove('input-centered');
+    }
+    // 注意：切换状态后，可能需要重新计算高度，但这通常由CSS处理
+    // 如果发现布局问题，可以在这里或调用它的地方延迟调用 adjustChatContainerHeight()
+    // setTimeout(adjustChatContainerHeight, 50); // 示例延迟调用
+}
+
 // Theme Toggle Functionality
 document.addEventListener("DOMContentLoaded", function () {
     const themeToggle = document.getElementById("theme-toggle");
@@ -83,19 +101,31 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // 调整聊天容器高度的函数
 function adjustChatContainerHeight() {
+    const body = document.body;
     const chatContainer = document.getElementById('chat-container');
+
+    if (body.classList.contains('input-centered')) {
+        if (chatContainer) {
+            chatContainer.style.height = ''; // 清除可能残留的高度样式
+        }
+        return;
+    }
+
+    // 原有的非居中状态下的高度计算逻辑
     const inputContainer = document.getElementById('input-container');
     const mainContainer = document.getElementById('main-container');
 
     if (!chatContainer || !inputContainer || !mainContainer) return;
 
-    // 计算可用高度
-    const availableHeight = mainContainer.clientHeight;
-    const inputHeight = inputContainer.offsetHeight;
-    const padding = 20; // 留一些间距
+    // 确保 chatContainer 是可见的才计算
+    if (window.getComputedStyle(chatContainer).display === 'none') return;
 
-    // 设置聊天容器高度
-    chatContainer.style.height = `${availableHeight - inputHeight - padding + 5}px`;
+    const availableHeight = mainContainer.clientHeight; // 使用 mainContainer 或 chat-area 的高度
+    const inputHeight = inputContainer.offsetHeight;
+    const padding = 5; // 调整上下留白
+
+    // 只有在非居中时才设置高度
+    chatContainer.style.height = `${availableHeight - inputHeight - padding}px`;
 }
 
 async function setSessionID() {
@@ -410,6 +440,11 @@ async function sendMessage(isReply) {
 
     // 从inputField的dataset中获取content_id（如果存在）
     const content_id = parseInt(inputField.dataset.content_id || "0");
+    if (userMessage || (fileInput && fileInput.files.length > 0)) {
+        chatContainer.style.display = "block"; // 确保聊天容器可见
+        // 可能需要立即或稍后调整高度
+        adjustChatContainerHeight();
+    }
 
     if (!userMessage) {
         return;
@@ -837,7 +872,6 @@ function setupScrollListener(chatContainer) {
         scrollToBottomButton.style.display = 'none';
     }
 }
-
 
 async function handleNewSession(userMessage, sessionId) {
     await setSessionID();
@@ -1578,6 +1612,7 @@ function createDocumentModal(base64Data, mimeType) {
 
 async function loadHistoryById(id, title) {
     try {
+        document.body.classList.remove('input-centered');
         const response = await fetch(`/findHistory/${id}`, {method: 'PUT'});
         if (!response.ok) {
             throw new Error(`加载历史记录失败: ${response.status}`);
@@ -1811,6 +1846,8 @@ function startNewConversation() {
     }
     uploadedFiles = []; // 清空全局文件数组
 
+    updateInputCentering();
+
     const mainContainer = document.getElementById("main-container");
     const toggleHistoryBtn = document.getElementById("toggle-history-btn");
     if (mainContainer && mainContainer.classList.contains("show-history")) {
@@ -1826,32 +1863,15 @@ function startNewConversation() {
         adjustChatContainerHeight();
     }
 
-    // chatContainer.style.display = "none";
+    chatContainer.style.display = "none";
     console.log("Conversation reset successfully.");
 }
 
-// // 页面加载时加载历史记录
-// window.onload = async () => {
-//     try {
-//         const historyResponse = await fetch("/historyList", {method: "GET"});
-//         if (!historyResponse.ok) {
-//             console.error(`History API error: ${historyResponse.status}`);
-//             return;
-//         }
-//         const historyData = await historyResponse.json();
-//         updateHistoryList(historyData);
-//     } catch (error) {
-//         console.error("Error loading history on page load:", error);
-//     }
-// };
-
 // 页面加载时默认不需要加载历史记录，因为它是隐藏的
 window.onload = async () => {
-    // 初始主题设置等...
-    const themeToggle = document.getElementById("theme-toggle"); // Assuming theme toggle setup is here or called
-
     // 初始计算高度
     adjustChatContainerHeight();
+    updateInputCentering();
 };
 
 async function historyList() {
@@ -1879,8 +1899,6 @@ window.addEventListener("beforeunload", function () {
         sessionStorage.setItem("sessionId", "");
     }, 0);
 });
-
-const sidebar = document.getElementById('sidebar');
 
 async function fetchFontAndConvertToBase64(fontURL) {
     try {
@@ -2015,6 +2033,11 @@ async function exportToPDF() {
 }
 
 function getFileIcon(mimeType) {
+    // 添加一个检查，以防 mimeType 为 null 或 undefined
+    if (!mimeType) {
+        return 'far fa-file'; // 或者返回一个特定的“未知”图标
+    }
+
     if (mimeType.startsWith('image/')) {
         return 'far fa-file-image';
     } else if (mimeType.startsWith('video/')) {
@@ -2027,15 +2050,17 @@ function getFileIcon(mimeType) {
         return 'far fa-file-word';
     } else if (mimeType.includes('excel') || mimeType === 'application/vnd.ms-excel' || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
         return 'far fa-file-excel';
+    } else if (mimeType === 'text/csv') {
+        return 'far fa-file-csv';
     } else if (mimeType.includes('powerpoint') || mimeType === 'application/vnd.ms-powerpoint' || mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
         return 'far fa-file-powerpoint';
-    } else if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed') {
+    } else if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed' || mimeType === 'application/x-rar-compressed' || mimeType === 'application/x-7z-compressed' || mimeType === 'application/gzip' || mimeType === 'application/x-tar') { // **扩展: 更多压缩格式**
         return 'far fa-file-archive';
-    } else if (mimeType === 'text/plain') {
+    } else if (mimeType === 'text/plain' || mimeType === 'text/rtf' || mimeType.includes('markdown') || mimeType === 'text/md') { // **新增: RTF, Markdown 并与 Plain Text 合并**
         return 'far fa-file-alt';
     } else if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') {
         return 'far fa-file-code';
-    } else if (mimeType.includes('javascript') || mimeType.includes('json') || mimeType.includes('xml') || mimeType.includes('css')) {
+    } else if (mimeType.includes('javascript') || mimeType.includes('python')) {
         return 'far fa-file-code';
     } else {
         return 'far fa-file';
