@@ -1653,13 +1653,15 @@ function updateHistoryList(historyData) {
             // 省略号按钮（...）
             const moreButton = document.createElement("button");
             moreButton.innerHTML = "..."; // 使用三个点表示
+            moreButton.className = "history-item-more-btn";
             moreButton.style.marginRight = "10px"; // 按钮与标题之间的间距
             moreButton.addEventListener("click", (event) => {
                 event.stopPropagation();
 
                 const menu = document.createElement("div");
+                menu.className = "history-item-menu";
                 menu.style.position = "absolute";
-                menu.style.backgroundColor = "#1a1a2a";
+                menu.style.backgroundColor = "var(--history-hover-bg-color)";
                 menu.style.border = "1px solid #ccc";
                 menu.style.padding = "10px";
                 menu.style.zIndex = "1000";

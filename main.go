@@ -36,7 +36,7 @@ import (
 	"time"
 )
 
-//go:embed templates/*.* templates/static/.env templates/static/config.yaml templates/static/favicon.ico sqlite-amalgamation-3490100/* favicon.ico templates/sdk/*
+//go:embed templates/*.* templates/static/.env templates/static/config.yaml templates/static/favicon.ico sqlite-amalgamation-3490100/* favicon.ico templates/sdk/* templates/webfonts/*
 var fs embed.FS
 
 // 全局变量，存储选中的项目简介
