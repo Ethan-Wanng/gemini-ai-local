@@ -33,6 +33,10 @@
         <button id="export-pdf" onclick="exportToPDF()" title="导出PDF">
             <i class="fas fa-file-pdf"></i>
         </button>
+        <!-- 新增历史记录切换按钮 -->
+        <button id="history-toggle-btn" title="切换历史记录">
+            <i class="fas fa-history"></i>
+        </button>
         <button id="theme-toggle" title="切换主题">
             <i class="fas fa-sun"></i>
         </button>
@@ -42,10 +46,6 @@
     <!-- 左侧聊天区域 -->
     <div id="chat-area">
         <div id="chat-container"></div>
-        <!-- 滚动到底部按钮 -->
-        <button class="scroll-to-bottom-btn" id="scroll-to-bottom" onclick="scrollToBottom()" title="滚动到底部">
-            <i class="fas fa-arrow-down"></i>
-        </button>
         <div id="input-container">
             <button id="new-conversation-button" onclick="startNewConversation()" title="新对话">
                 <i class="fas fa-comment-dots"></i>
@@ -64,6 +64,11 @@
                 <i class="fas fa-paper-plane"></i>
             </button>
         </div>
+
+        <!-- 滚动到底部按钮 -->
+        <button class="scroll-to-bottom-btn" id="scroll-to-bottom" onclick="scrollToBottom()" title="滚动到底部">
+            <i class="fas fa-arrow-down"></i>
+        </button>
     </div>
 
     <!-- 右侧历史记录容器 -->

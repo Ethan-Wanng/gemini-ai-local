@@ -55,25 +55,31 @@ header {
     font-size: 1.2rem; /* 减小字体大小 */
 }
 
-/* 主容器 */
 #main-container {
     display: flex;
-    max-width: 1680px;
+    max-width: 1680px; /* 或根据需要调整 */
     margin: 0 auto;
-    gap: 15px; /* 减少间隙 */
-    padding: 15px; /* 减少内边距 */
-    height: calc(100vh - 70px); /* 调整高度计算 */
-    box-sizing: border-box; /* 确保padding不增加总高度 */
-    overflow: hidden; /* 防止溢出 */
+    gap: 0; /* 初始无间隙 */
+    padding: 15px;
+    height: calc(100vh - 70px);
+    box-sizing: border-box;
+    overflow: hidden;
+    justify-content: center; /* 默认和 history 可见时都居中内容 */
+    transition: gap 0.3s ease;
 }
 
 #chat-area {
-    flex: 1;
+    /* flex: 1; <-- 移除这个，不再让它填充空间 */
+    width: 100%; /* 尝试占据100%宽度... */
+    max-width: 1000px; /* ...但最大不超过1000px (或者你希望的宽度) */
+    flex-grow: 0; /* 不允许放大 */
+    flex-shrink: 0; /* 不允许缩小 (重要!) */
     display: flex;
     flex-direction: column;
-    height: 100%; /* 使用100%高度 */
-    max-height: 100%; /* 限制最大高度 */
-    overflow: hidden; /* 防止溢出 */
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    /* 移除 transition: max-width，因为 max-width 不再改变 */
 }
 
 #chat-container {
@@ -90,7 +96,7 @@ header {
     transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
     margin-bottom: 20px;
     /* 不在这里设置固定高度，我们会在JS中动态计算 */
-    min-height: 200px; /* 设置最小高度，防止过小 */
+    min-height: 100px /* 设置最小高度，防止过小 */
 }
 
 .message {
@@ -184,17 +190,60 @@ header {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* 历史记录容器 */
+/* 修改 #history-container 默认样式 */
 #history-container {
-    width: 350px; /* 增加宽度 */
-    background-color: white;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px var(--shadow-color);
-    padding: 10px; /* 减少内边距 */
-    overflow-y: auto;
-    height: 100%; /* 使用100%高度 */
-    max-height: 100%; /* 限制最大高度 */
-    box-sizing: border-box; /* 确保padding不增加总高度 */
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: width 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    padding: 0;
+    height: 100%;
+    max-height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0; /* 确保历史记录本身也不缩小 */
+    border: none;
+}
+
+body.history-visible #main-container {
+    justify-content: center; /* 或者保持 center，让整体居中 */
+    gap: 15px; /* 恢复间隙 */
+}
+
+body.history-visible #history-container {
+    width: 350px; /* 恢复宽度 */
+    opacity: 1; /* 恢复不透明 */
+    padding: 10px; /* 恢复内边距 */
+    /* 可以考虑恢复边框，如果需要的话 */
+    /* border: 1px solid var(--border-color); */
+}
+
+/* （可选）为历史记录切换按钮添加样式 */
+#history-toggle-btn {
+    background-color: transparent;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: 8px;
+}
+
+#history-toggle-btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+/* （可选）指示按钮活动状态 */
+body.history-visible #history-toggle-btn {
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 #history-container h3 {
@@ -206,10 +255,27 @@ header {
     font-weight: 600;
 }
 
+body.history-visible #history-container h3 {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 0s; /* 立即显示 */
+}
+
 #history-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    visibility: hidden;
+    opacity: 0;
+    transition: visibility 0s linear 0.3s, opacity 0.3s ease;
     list-style-type: none;
     padding: 0;
     margin: 0;
+}
+
+body.history-visible #history-list {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 0s;
 }
 
 #history-list li {
@@ -293,24 +359,33 @@ li.active {
 }
 
 .scroll-to-bottom-btn {
-    position: fixed;
-    bottom: 100px;
-    right: 20px;
+    /* --- 移除或注释掉这些 --- */
+    /* position: fixed; */
+    /* bottom: 100px; */ /* Or whatever value it had */
+    /* right: 20px; */ /* Or whatever value it had */
+    /* z-index: 1000; */ /* No longer needed for stacking */
+
+    /* --- 添加或修改这些 --- */
+    display: none; /* 初始隐藏，由 JS 控制显示 */
+    margin: 8px auto 5px auto; /* 上边距8px，左右自动（居中），下边距5px */
+    cursor: pointer; /* 确保有指针样式 */
+
+    /* --- 保留这些视觉样式 --- */
     border-radius: 50%;
     background-color: var(--button-bg-color);
     color: white;
     border: none;
-    width: 36px; /* 进一步减小尺寸 */
-    height: 36px; /* 进一步减小尺寸 */
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 36px;
+    height: 36px;
+    /* display: flex; <--  由 JS 控制 block/none */
+    align-items: center; /* 保留，用于图标居中 */
+    justify-content: center; /* 保留，用于图标居中 */
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-    z-index: 1000;
     transition: all 0.3s ease;
 }
 
 .scroll-to-bottom-btn:hover {
+    /* 保留 hover 效果 */
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }

@@ -137,8 +137,7 @@ func GetSessionTitle(input configuration.UserInput) (*Title, error) {
 		input.Message = input.Message + "\n，请根据这段文字帮我起一个标题，不超过26个字符，直接给出一个，不要添加任何信息，后面不要加换行"
 
 		var str *string
-		for i := range 3 {
-			log.Println(i)
+		for range 3 {
 			str = getTitle(input)
 			if str != nil {
 				title.Text = *str
@@ -359,29 +358,6 @@ func saveSession(ctx context.Context, tx *sql.Tx, session *persistence.Session) 
 	}
 }
 
-func PostRequestOnClient(input configuration.UserInput) (*http.Response, error) {
-	body, err := new(RequestBody).prepareRequestBody(input)
-	if err != nil {
-		return nil, err
-	}
-
-	request, err := http.NewRequest("POST",
-		configuration.BuildAIApi("gemini-1.5-flash", configuration.EnvMap["CONTENT_TYPE_JSON"]),
-		bytes.NewBuffer(body))
-
-	if err != nil {
-		return nil, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-
-	resp, err := configuration.CurrentClient.Do(request)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
-}
-
 func saveHistory(ctx context.Context, tx *sql.Tx, sessionID int64, role string, input interface{}) error {
 	var message string
 	var files []*configuration.InlineDataDto
@@ -464,6 +440,29 @@ func saveHistory(ctx context.Context, tx *sql.Tx, sessionID int64, role string, 
 		return fmt.Errorf("failed to insert content: %w", err)
 	}
 	return nil
+}
+
+func PostRequestOnClient(input configuration.UserInput) (*http.Response, error) {
+	body, err := new(RequestBody).prepareRequestBody(input)
+	if err != nil {
+		return nil, err
+	}
+
+	request, err := http.NewRequest("POST",
+		configuration.BuildAIApi("gemini-1.5-flash", configuration.EnvMap["CONTENT_TYPE_JSON"]),
+		bytes.NewBuffer(body))
+
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	resp, err := configuration.CurrentClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func FindHistoryBySessionID(db *sql.DB, sessionID int64, isNeedContentID bool) (*RequestBody, error) {

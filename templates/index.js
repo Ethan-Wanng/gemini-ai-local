@@ -45,10 +45,39 @@ document.addEventListener("DOMContentLoaded", function () {
         toggleTheme();
     });
 
-    // 添加窗口大小调整监听
-    adjustChatContainerHeight();
+    const historyToggleButton = document.getElementById('history-toggle-btn');
+    const bodyElement = document.body; // 或者使用 document.getElementById('main-container');
 
-    // 添加窗口大小变化监听
+    if (historyToggleButton) {
+        historyToggleButton.addEventListener('click', async () => {
+            bodyElement.classList.toggle('history-visible');
+
+            try {
+                const historyResponse = await fetch("/historyList", {method: "GET"});
+                if (!historyResponse.ok) {
+                    console.error(`History API error: ${historyResponse.status}`);
+                    return;
+                }
+                const historyData = await historyResponse.json();
+                updateHistoryList(historyData);
+            } catch (error) {
+                console.error("Error loading history on page load:", error);
+            }
+            // 重要：当布局改变后，重新计算聊天容器的高度
+            // 使用 setTimeout 确保浏览器有时间应用 CSS 类并完成重排 (reflow)
+            setTimeout(() => {
+                adjustChatContainerHeight();
+                // 如果聊天内容很多，可能需要再次滚动到底部
+                const chatContainer = document.getElementById('chat-container');
+                if (chatContainer && autoScroll) { // 检查是否需要自动滚动
+                    scrollToBottom(chatContainer);
+                }
+            }, 310); // 延迟时间略大于 CSS 过渡时间
+        });
+    }
+
+    // 初始调整聊天容器高度
+    adjustChatContainerHeight();
     window.addEventListener('resize', adjustChatContainerHeight);
 });
 
@@ -778,27 +807,37 @@ function setupScrollListener(chatContainer) {
     const scrollToBottomButton = document.getElementById("scroll-to-bottom");
 
     chatContainer.addEventListener("wheel", (event) => {
-        // 稍微放宽判断是否在底部的条件，允许一些误差（例如 10 像素）
         const isAtBottom = chatContainer.scrollHeight - chatContainer.clientHeight <= chatContainer.scrollTop + 10;
 
         if (event.deltaY < 0) { // 向上滚动
             autoScroll = false;
-            scrollToBottomButton.style.display = "block";
+            scrollToBottomButton.style.display = "block"; // <--- 确保是设置 display
         } else if (!isAtBottom) { // 向下滚动 且 不在底部
-            autoScroll = false;
-            scrollToBottomButton.style.display = "block";
+            // Keep autoScroll false if user initiated scroll
+            // autoScroll = false;
+            // Keep button visible if not at bottom
+            scrollToBottomButton.style.display = "block"; // <--- 确保是设置 display
         } else {  // 向下滚动 且 在底部
             autoScroll = true;
-            scrollToBottomButton.style.display = "none";
+            scrollToBottomButton.style.display = "none"; // <--- 确保是设置 display
         }
     });
 
     scrollToBottomButton.addEventListener("click", () => {
         autoScroll = true;
         scrollToBottom(chatContainer); // 立即滚动到底部
-        scrollToBottomButton.style.display = "none";
+        scrollToBottomButton.style.display = "none"; // <--- 点击后隐藏
     });
+
+    // Initial check in case container is already scrollable but at bottom
+    if (chatContainer.scrollHeight > chatContainer.clientHeight &&
+        chatContainer.scrollHeight - chatContainer.clientHeight > chatContainer.scrollTop + 10) {
+        scrollToBottomButton.style.display = 'block';
+    } else {
+        scrollToBottomButton.style.display = 'none';
+    }
 }
+
 
 async function handleNewSession(userMessage, sessionId) {
     await setSessionID();
@@ -1770,23 +1809,47 @@ function startNewConversation() {
     }
     uploadedFiles = []; // 清空全局文件数组
 
+    const mainContainer = document.getElementById("main-container");
+    const toggleHistoryBtn = document.getElementById("toggle-history-btn");
+    if (mainContainer && mainContainer.classList.contains("show-history")) {
+        mainContainer.classList.remove("show-history");
+        if (toggleHistoryBtn) {
+            toggleHistoryBtn.title = "显示历史记录";
+            toggleHistoryBtn.innerHTML = '<i class="fas fa-history"></i>';
+        }
+        // 隐藏后重新计算高度
+        setTimeout(adjustChatContainerHeight, 310);
+    } else {
+        // 即使没隐藏，也重新计算一下高度
+        adjustChatContainerHeight();
+    }
+
     // chatContainer.style.display = "none";
     console.log("Conversation reset successfully.");
 }
 
-// 页面加载时加载历史记录
+// // 页面加载时加载历史记录
+// window.onload = async () => {
+//     try {
+//         const historyResponse = await fetch("/historyList", {method: "GET"});
+//         if (!historyResponse.ok) {
+//             console.error(`History API error: ${historyResponse.status}`);
+//             return;
+//         }
+//         const historyData = await historyResponse.json();
+//         updateHistoryList(historyData);
+//     } catch (error) {
+//         console.error("Error loading history on page load:", error);
+//     }
+// };
+
+// 页面加载时默认不需要加载历史记录，因为它是隐藏的
 window.onload = async () => {
-    try {
-        const historyResponse = await fetch("/historyList", {method: "GET"});
-        if (!historyResponse.ok) {
-            console.error(`History API error: ${historyResponse.status}`);
-            return;
-        }
-        const historyData = await historyResponse.json();
-        updateHistoryList(historyData);
-    } catch (error) {
-        console.error("Error loading history on page load:", error);
-    }
+    // 初始主题设置等...
+    const themeToggle = document.getElementById("theme-toggle"); // Assuming theme toggle setup is here or called
+
+    // 初始计算高度
+    adjustChatContainerHeight();
 };
 
 async function historyList() {
