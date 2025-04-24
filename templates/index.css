@@ -121,6 +121,7 @@ header {
 }
 
 .user-message {
+    margin-bottom: 50px;
     background-color: var(--message-bg-color);
     margin-left: auto;
     padding: 12px; /* 减少内边距 */
@@ -136,6 +137,7 @@ header {
 .ai-message {
     background-color: var(--ai-message-bg-color);
     text-align: left;
+    margin-bottom: 50px;
     margin-right: auto;
     transition: background-color 0.3s;
     width: fit-content;
@@ -370,13 +372,6 @@ li.active {
 }
 
 .scroll-to-bottom-btn {
-    /* --- 移除或注释掉这些 --- */
-    /* position: fixed; */
-    /* bottom: 100px; */ /* Or whatever value it had */
-    /* right: 20px; */ /* Or whatever value it had */
-    /* z-index: 1000; */ /* No longer needed for stacking */
-
-    /* --- 添加或修改这些 --- */
     display: none; /* 初始隐藏，由 JS 控制显示 */
     margin: 8px auto 5px auto; /* 上边距8px，左右自动（居中），下边距5px */
     cursor: pointer; /* 确保有指针样式 */
@@ -388,7 +383,6 @@ li.active {
     border: none;
     width: 36px;
     height: 36px;
-    /* display: flex; <--  由 JS 控制 block/none */
     align-items: center; /* 保留，用于图标居中 */
     justify-content: center; /* 保留，用于图标居中 */
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
@@ -687,7 +681,7 @@ pre code.hljs {
 }
 
 .message-wrapper {
-    display: flex;
+    display: block;
     justify-content: space-between;
     align-items: flex-start;
     gap: 10px;
@@ -701,6 +695,9 @@ pre code.hljs {
     padding: 5px;
     opacity: 0.5;
     transition: opacity 0.2s;
+    margin-left: auto; /* 将按钮推到右边 */
+    display: block; /* 确保 margin-left 生效 */
+    float: right; /* 另一种将其浮动到右侧的方式 */
 }
 
 .edit-message-btn:hover {
@@ -761,6 +758,57 @@ pre code.hljs {
     gap: 10px;
     margin-top: 10px;
 }
+
+/* Add this to your main CSS file */
+.edit-container-sized {
+    max-width: var(--message-max-width, 80%); /* Use your message max-width variable or a fixed value like 700px */
+    width: 100%; /* Ensure it tries to fill the available width up to max-width */
+    box-sizing: border-box; /* Include padding/border in the element's total width/height */
+    /* Inherit or set other relevant styles like padding, border-radius if needed */
+    padding: 10px;
+    border-radius: 8px; /* Example-color)); /* Match message background */
+    border: 1px solid var(--border-color);
+    margin-bottom: 10px; /* Spacing below the edit box */
+}
+
+/* Style for individual file previews within the edit area */
+.edit-file-preview-item {
+    position: relative; /* Needed for absolute positioning of the delete button */
+    margin-bottom: 8px;
+    padding: 5px;
+    border: 1px solid var(--border-color-light, #eee); /* Lighter border for previews */
+    border-radius: 4px;
+    background-color: var(--bg-secondary-color, #f9f9f9); /* Slightly different background */
+}
+
+.edit-file-delete-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: rgba(255, 0, 0, 0.7); /* Semi-transparent red */
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    line-height: 18px; /* Center the 'x' */
+    text-align: center;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1; /* Ensure it's above the preview content */
+    transition: background-color 0.2s;
+}
+
+.edit-file-preview-item .file-container,
+.edit-file-preview-item .image-thumbnail-container,
+.edit-file-preview-item .video-container,
+.edit-file-preview-item .audio-container,
+.edit-file-preview-item .file-link-container {
+    margin: 0; /* Remove default margins if they cause issues */
+    padding: 0; /* Remove default padding if needed */
+}
+
 
 /* 响应式设计 */
 @media (max-width: 1200px) {

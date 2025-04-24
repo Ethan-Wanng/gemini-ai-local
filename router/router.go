@@ -23,7 +23,43 @@ func Register() *http.ServeMux {
 	r.HandleFunc("GET /lastSessionID", handleLastSessionID)
 	r.HandleFunc("DELETE /deleteHistory/{id}", handleDeleteHistory)
 	r.HandleFunc("PUT /edit-history/{sessionId}", handleEditHistoryTitle)
+	r.HandleFunc("GET /getTwoLastContent/{sessionId}", handleTwoLastContent)
 	return r
+}
+
+func handleTwoLastContent(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("sessionId"))
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to parse request", http.StatusBadRequest)
+		return
+	}
+
+	type T struct {
+		UserContentID int64 `json:"userContentId"`
+		AIContentID   int64 `json:"aiContentId"`
+	}
+
+	userContent, aiContent, err := domain.GetTwoLastContent(configuration.DB, int64(id))
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to parse request", http.StatusInternalServerError)
+		return
+	}
+	if userContent == nil || aiContent == nil {
+		return
+	}
+	t := T{
+		UserContentID: *userContent,
+		AIContentID:   *aiContent,
+	}
+	bytes, err := json.Marshal(&t)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Server error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(bytes)
 }
 
 func handleEditHistoryTitle(w http.ResponseWriter, r *http.Request) {

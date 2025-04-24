@@ -742,3 +742,35 @@ func SaveKey(key string) error {
 	log.Printf("API Key 已成功加密并保存（或更新）到数据库。")
 	return nil
 }
+
+func GetTwoLastContent(db *sql.DB, sessionID int64) (*int64, *int64, error) {
+	sqlStmt := `
+        SELECT c.id FROM content c WHERE c.session_id = ? ORDER BY c.id DESC LIMIT 2
+    `
+
+	rows, err := db.Query(sqlStmt, sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, nil, err
+		}
+		ids = append(ids, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	// 如果不足两条记录，返回 nil
+	if len(ids) < 2 {
+		return nil, nil, nil
+	}
+
+	return &ids[1], &ids[0], nil
+}

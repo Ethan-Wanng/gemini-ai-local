@@ -22,6 +22,7 @@
     <div id="model-selector">
         <select id="model-select" onchange="changeModel()">
             <option selected value="gemini-2.0-flash">Gemini 2.0 Flash (默认)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 flash</option>
             <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
             <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (图片)</option>
             <option value="gemini-exp-1206">Gemini Experimental 1206</option>
@@ -65,10 +66,12 @@
             </button>
         </div>
 
-        <!-- 滚动到底部按钮 -->
-        <button class="scroll-to-bottom-btn" id="scroll-to-bottom" onclick="scrollToBottom()" title="滚动到底部">
-            <i class="fas fa-arrow-down"></i>
-        </button>
+        <div style="height: 48px">
+            <!-- 滚动到底部按钮 -->
+            <button class="scroll-to-bottom-btn" id="scroll-to-bottom" onclick="scrollToBottom()" title="滚动到底部">
+                <i class="fas fa-arrow-down"></i>
+            </button>
+        </div>
     </div>
 
     <!-- 右侧历史记录容器 -->

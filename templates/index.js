@@ -15,9 +15,6 @@ function updateInputCentering() {
     } else {
         body.classList.remove('input-centered');
     }
-    // 注意：切换状态后，可能需要重新计算高度，但这通常由CSS处理
-    // 如果发现布局问题，可以在这里或调用它的地方延迟调用 adjustChatContainerHeight()
-    // setTimeout(adjustChatContainerHeight, 50); // 示例延迟调用
 }
 
 // Theme Toggle Functionality
@@ -503,14 +500,13 @@ async function sendMessage(isReply) {
     chatContainer.style.display = "block";
     const conversationContainer = createConversationContainer(userMessage, fileBase64s);
     chatContainer.appendChild(conversationContainer);
-    scrollToBottom(chatContainer);
 
     if (uploadedFilesInfo) {
         uploadedFilesInfo.innerHTML = ""
         uploadedFilesInfo.style.display = "none"; // Hide the file info container
     }
     // Create and show AI message container immediately
-    const {aiMessageElement, aiMessageElementOnCopy} = createAIMessageElements(conversationContainer);
+    const {aiConversationContainer, aiMessageElement, aiMessageElementOnCopy} = createAIMessageElements(chatContainer);
     aiMessageElement.textContent = "AI is thinking...";
 
     // 调整容器高度
@@ -550,8 +546,14 @@ async function sendMessage(isReply) {
         }
 
         await updateHistoryListFromServer();
-        await loadHistoryById(getSessionId(), "")
 
+        const response = await fetch(`/getTwoLastContent/${sessionId}`, {method: 'GET'});
+        if (!response.ok) {
+            throw new Error(`获取content id 失败: ${response.status}`);
+        }
+        const data = await response.json();
+        conversationContainer.dataset.content_id = data.userContentId;
+        aiConversationContainer.dataset.content_id = data.aiContentId;
         // 在完成后再次调整高度
         adjustChatContainerHeight();
 
@@ -584,10 +586,12 @@ function createConversationContainer(userMessage, fileBase64s = []) {
     messageWrapper.className = "message-wrapper";
 
     // Add edit button
+    const editButtonDiv = document.createElement("div");
     const editButton = document.createElement("button");
     editButton.className = "edit-message-btn";
     editButton.innerHTML = '<i class="fas fa-edit"></i>';
     editButton.onclick = () => editMessage(userMessageElement, userMessage, fileBase64s);
+    editButtonDiv.appendChild(editButton);
 
     // Handle the text message
     const textDiv = document.createElement("div");
@@ -595,7 +599,7 @@ function createConversationContainer(userMessage, fileBase64s = []) {
     textDiv.textContent = userMessage;
 
     messageWrapper.appendChild(textDiv);
-    messageWrapper.appendChild(editButton);
+    messageWrapper.appendChild(editButtonDiv);
     userMessageElement.appendChild(messageWrapper);
 
     if (fileBase64s.length > 0) {
@@ -615,104 +619,357 @@ function createConversationContainer(userMessage, fileBase64s = []) {
     return conversationContainer;
 }
 
-function editMessage(messageElement, originalText, originalFiles = []) {
+// Helper to read File as Base64 Data URL
+function readFileAsBase64(file) {
+    // Add a log to see when it's called
+    console.log(`Attempting to read file: ${file.name}, type: ${file.type}, size: ${file.size}`);
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = (event) => {
+            console.log(`Successfully read file: ${file.name}`);
+            resolve(event.target.result); // result is the Data URL
+        };
+
+        reader.onerror = (event) => {
+            // **** Log the specific error from the reader ****
+            console.error(`FileReader error occurred for file: ${file.name}`);
+            console.error("FileReader error object:", event.target.error); // THIS IS KEY
+            // Reject with the actual error object for better debugging upstream
+            reject(event.target.error || new Error(`Unknown FileReader error for ${file.name}`));
+        };
+
+        reader.onabort = () => {
+            console.warn(`File reading aborted for: ${file.name}`);
+            reject(new Error(`File reading aborted for ${file.name}`));
+        };
+
+        try {
+            reader.readAsDataURL(file);
+        } catch (e) {
+            // Catch synchronous errors during the read call itself (rare)
+            console.error(`Error initiating FileReader.readAsDataURL for ${file.name}:`, e);
+            reject(e);
+        }
+    });
+}
+
+/**
+ * Replaces a user message element with an editing interface, including clickable media/document previews.
+ *
+ * @param {HTMLElement} messageElement The user message div to replace.
+ * @param {string} originalText The original text content of the message.
+ * @param {Array<{data: string, mimeType: string}>} originalFilesData Array of original file objects.
+ */
+async function editMessage(messageElement, originalText, originalFilesData = []) {
+    // ... (editContainer, textarea, filesPreviewContainer setup - no changes) ...
     const editContainer = document.createElement("div");
     editContainer.className = "edit-container";
+    editContainer.style.border = "1px solid var(--border-color)";
+    editContainer.style.padding = "10px";
+    editContainer.style.marginTop = "5px";
+    editContainer.style.borderRadius = "8px";
+    editContainer.style.backgroundColor = "var(--input-bg-color)";
 
-    // Create textarea for text editing
     const textarea = document.createElement("textarea");
     textarea.className = "edit-textarea";
     textarea.value = originalText;
     textarea.style.width = "100%";
     textarea.style.minHeight = "60px";
     textarea.style.resize = "vertical";
+    textarea.style.marginBottom = "10px";
+    textarea.style.backgroundColor = "var(--bg-color)";
+    textarea.style.color = "var(--text-color)";
+    textarea.style.border = "1px solid var(--border-color)";
     textarea.addEventListener('input', () => adjustTextareaHeight(textarea));
 
-    // Create file input for new files
+    const filesPreviewContainer = document.createElement("div");
+    filesPreviewContainer.className = "edit-files-preview";
+    filesPreviewContainer.style.marginBottom = "10px";
+    filesPreviewContainer.style.maxHeight = "150px";
+    filesPreviewContainer.style.overflowY = "auto";
+    filesPreviewContainer.style.padding = "5px";
+    filesPreviewContainer.style.border = "1px dashed var(--border-color)";
+    filesPreviewContainer.style.borderRadius = "4px";
+
+
+    let currentFiles = [];
+    let fileCounter = 0;
+
+    // --- renderEditFileItem: Ensure name shows for audio, no click preview for audio icon ---
+    function renderEditFileItem(fileObject) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "edit-file-item";
+        // ... styles ...
+        fileDiv.style.display = "flex";
+        fileDiv.style.alignItems = "center";
+        fileDiv.style.justifyContent = "space-between";
+        fileDiv.style.padding = "5px 8px";
+        fileDiv.style.marginBottom = "5px";
+        fileDiv.style.backgroundColor = "var(--bg-color)";
+        fileDiv.style.borderRadius = "4px";
+        fileDiv.style.border = "1px solid var(--border-color)";
+
+        const fileInfo = document.createElement("div");
+        fileInfo.style.display = "flex";
+        fileInfo.style.alignItems = "center";
+        fileInfo.style.overflow = "hidden";
+        fileInfo.style.flexGrow = "1";
+        fileInfo.style.marginRight = "5px";
+
+        let previewElement;
+        const isImage = fileObject.mimeType.startsWith('image/');
+        const isVideo = fileObject.mimeType.startsWith('video/');
+        const isAudio = fileObject.mimeType.startsWith('audio/'); // Added check for audio
+        const isPdf = fileObject.mimeType === 'application/pdf';
+        const isText = fileObject.mimeType.startsWith('text/');
+        // Update canPreview to exclude audio for the *edit list click*
+        const canPreview = isImage || isVideo || isPdf || isText;
+
+        // Create Preview Element
+        if (isImage) {
+            previewElement = document.createElement("img");
+            // ... image setup ...
+            previewElement.src = fileObject.dataUrl;
+            previewElement.alt = "Preview";
+            previewElement.style.width = "32px";
+            previewElement.style.height = "32px";
+            previewElement.style.objectFit = "cover";
+            previewElement.style.marginRight = "8px";
+            previewElement.style.borderRadius = "3px";
+            previewElement.style.flexShrink = "0";
+        } else {
+            previewElement = document.createElement("i");
+            let iconClass = "far fa-file"; // Default
+            if (isVideo) iconClass = "far fa-file-video";
+            else if (isAudio) iconClass = "far fa-file-audio"; // Use specific audio icon
+            else iconClass = getFileIcon(fileObject.mimeType); // Use helper for others
+
+            previewElement.className = `${iconClass} file-preview-icon`;
+            // ... icon styles ...
+            previewElement.style.marginRight = "8px";
+            previewElement.style.fontSize = "1.6em";
+            previewElement.style.width = "25px";
+            previewElement.style.textAlign = "center";
+            previewElement.style.color = "var(--text-secondary-color)";
+            previewElement.style.flexShrink = "0";
+        }
+
+        // Add Click Handler ONLY if previewable (Image, Video, PDF, Text)
+        if (canPreview) {
+            previewElement.style.cursor = 'pointer';
+            previewElement.title = '点击预览';
+            previewElement.onclick = (event) => {
+                event.stopPropagation();
+                console.log(`Preview clicked for: ${fileObject.name}, type: ${fileObject.mimeType}`);
+                if (isImage) createMediaModal(fileObject.dataUrl, 'image');
+                else if (isVideo) createMediaModal(fileObject.dataUrl, 'video');
+                else if (isPdf || isText) {
+                    const base64Data = fileObject.dataUrl.split(',')[1];
+                    if (base64Data) createDocumentModal(base64Data, fileObject.mimeType);
+                    else {
+                        console.error("Could not extract base64 data for document preview.");
+                        alert("无法准备文档预览数据。");
+                    }
+                }
+                // No action needed here for audio click
+            };
+        } else {
+            // Make non-previewable icons (like audio) have default cursor
+            previewElement.style.cursor = 'default';
+        }
+        fileInfo.appendChild(previewElement);
+
+
+        // Details Container (Name + Size)
+        const detailsDiv = document.createElement('div');
+        detailsDiv.style.display = 'flex';
+        detailsDiv.style.flexDirection = 'column';
+        detailsDiv.style.overflow = 'hidden';
+
+        // Conditionally add Name (SHOW for Audio, hide for image/video)
+        // This condition correctly includes Audio
+        if (!isImage && !isVideo) {
+            const nameSpan = document.createElement("span");
+            nameSpan.textContent = fileObject.name; // Use the actual name here
+            // ... nameSpan styles ...
+            nameSpan.style.fontSize = "13px";
+            nameSpan.style.whiteSpace = "nowrap";
+            nameSpan.style.overflow = "hidden";
+            nameSpan.style.textOverflow = "ellipsis";
+            nameSpan.title = fileObject.name;
+            detailsDiv.appendChild(nameSpan);
+        }
+
+        // Always add Size
+        const sizeSpan = document.createElement("span");
+        sizeSpan.textContent = `${formatFileSize(fileObject.size)}`;
+        // ... sizeSpan styles ...
+        sizeSpan.style.fontSize = "11px";
+        sizeSpan.style.color = "var(--text-secondary-color)";
+        if (isImage || isVideo) sizeSpan.style.marginTop = "2px"; // Adjust alignment if name hidden
+        detailsDiv.appendChild(sizeSpan);
+
+        fileInfo.appendChild(detailsDiv);
+
+        // Remove Button (no changes)
+        const removeBtn = document.createElement("button");
+        // ... removeBtn setup ...
+        removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+        removeBtn.title = "移除文件";
+        removeBtn.className = "edit-file-remove-btn";
+        removeBtn.style.border = "none";
+        removeBtn.style.background = "transparent";
+        removeBtn.style.color = "var(--text-secondary-color)";
+        removeBtn.style.cursor = "pointer";
+        removeBtn.style.fontSize = "14px";
+        removeBtn.style.padding = "0 5px";
+        removeBtn.style.flexShrink = "0";
+        removeBtn.onclick = (event) => {
+            event.stopPropagation();
+            const index = currentFiles.findIndex(f => f.id === fileObject.id);
+            if (index > -1) {
+                currentFiles.splice(index, 1);
+                fileDiv.remove();
+            }
+        };
+
+
+        fileDiv.appendChild(fileInfo);
+        fileDiv.appendChild(removeBtn);
+        filesPreviewContainer.appendChild(fileDiv);
+    }
+
+    // --- End of updated renderEditFileItem ---
+
+
+    // --- Process original/new files, Buttons, Assembly (No changes needed below) ---
+    originalFilesData.forEach((fileData, index) => {
+        const blob = base64ToBlob(fileData.data, fileData.mimeType);
+        const fileObject = {
+            dataUrl: `data:${fileData.mimeType};base64,${fileData.data}`,
+            mimeType: fileData.mimeType,
+            name: `original_file_${index}.${getFileType(fileData.mimeType).toLowerCase() || 'bin'}`, // Use helper for extension
+            size: blob.size,
+            isOriginal: true,
+            id: `orig_${fileCounter++}`
+        };
+        currentFiles.push(fileObject);
+        renderEditFileItem(fileObject);
+    });
+
+    async function handleNewFiles(filesToAdd) {
+        for (const file of filesToAdd) {
+            const existing = currentFiles.find(f => f.name === file.name && f.size === file.size);
+            if (existing) continue;
+
+            try {
+                const dataUrl = await readFileAsBase64(file);
+                const fileObject = {
+                    dataUrl: dataUrl,
+                    mimeType: file.type,
+                    name: file.name,
+                    size: file.size,
+                    isOriginal: false,
+                    id: `new_${fileCounter++}`
+                };
+                currentFiles.push(fileObject);
+                renderEditFileItem(fileObject);
+            } catch (error) {
+                console.error(`Failed to process file: ${file.name}`, error);
+                let errorMessage = `无法读取文件 ${file.name}.`;
+                if (error && error.message) errorMessage += ` 原因: ${error.message}`;
+                alert(errorMessage);
+            }
+        }
+        if (fileInput) fileInput.value = "";
+    }
+
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.multiple = true;
     fileInput.className = "edit-file-input";
+    fileInput.style.display = "block";
+    fileInput.style.marginTop = "10px";
+    fileInput.onchange = (e) => {
+        if (e.target.files.length > 0) handleNewFiles(e.target.files);
+    };
 
-    // Create buttons container
+    textarea.addEventListener('paste', (event) => {
+        if (event.clipboardData && event.clipboardData.files.length > 0) {
+            event.preventDefault();
+            handleNewFiles(event.clipboardData.files);
+        }
+    });
+
     const buttonsContainer = document.createElement("div");
     buttonsContainer.className = "edit-buttons";
+    buttonsContainer.style.marginTop = "15px";
+    buttonsContainer.style.display = "flex";
+    buttonsContainer.style.justifyContent = "flex-end";
 
-    // Save button
     const saveButton = document.createElement("button");
     saveButton.className = "save-edit-btn";
     saveButton.textContent = "提交";
-    saveButton.onclick = async () => {
-        // Get the chat container for scrolling
+    saveButton.style.marginLeft = "10px";
+    saveButton.onclick = async () => { /* ... save logic ... */
         const chatContainer = document.getElementById("chat-container");
-
-        // Set the input field value and prepare file handling
+        const globalFileInput = document.getElementById("file-input");
         const inputField = document.getElementById("user-input");
-        inputField.value = textarea.value;
-
-        // Get content_id from the parent conversation container
+        const newText = textarea.value.trim();
         const conversation = messageElement.closest('.conversation');
-        inputField.dataset.content_id = conversation ? conversation.dataset.content_id : null;
+        const content_id = conversation ? conversation.dataset.content_id : null;
 
-        // Handle files
-        const newFiles = await handleFileInput(fileInput);
+        if (!newText && currentFiles.length === 0) {
+            alert("请输入消息内容或添加文件。");
+            return;
+        }
+
         const dt = new DataTransfer();
-
-        // Add existing files
-        if (originalFiles && originalFiles.length > 0) {
-            originalFiles.forEach(file => {
-                const blob = base64ToBlob(file.data, file.mimeType);
-                const existingFile = new File([blob], `file.${file.mimeType.split('/')[1]}`, {type: file.mimeType});
-                dt.items.add(existingFile);
-            });
+        let totalSize = 0;
+        for (const fileObj of currentFiles) {
+            const blob = base64ToBlob(fileObj.dataUrl, fileObj.mimeType);
+            const file = new File([blob], fileObj.name, {type: fileObj.mimeType});
+            dt.items.add(file);
+            totalSize += file.size;
         }
 
-        // Add new files
-        if (newFiles.length > 0) {
-            newFiles.forEach(file => {
-                const blob = base64ToBlob(file.data, file.mimeType);
-                const newFile = new File([blob], `file.${file.mimeType.split('/')[1]}`, {type: file.mimeType});
-                dt.items.add(newFile);
-            });
+        const maxSize = 200 * 1024 * 1024;
+        if (totalSize > maxSize) {
+            alert(`文件总大小 (${formatFileSize(totalSize)}) 超过了 200MB 限制。请移除一些文件。`);
+            return;
         }
 
-        // Set combined files to global file input
-        document.getElementById("file-input").files = dt.files;
+        inputField.value = newText;
+        if (content_id) inputField.dataset.content_id = content_id; else inputField.dataset.content_id = "";
+        globalFileInput.files = dt.files;
 
-        // Remove edit container before sending message
         editContainer.remove();
-
-        // Enable auto-scroll
         autoScroll = true;
-
-        // Send message and scroll to bottom
         await sendMessage(true);
-        scrollToBottom(chatContainer);
+        await loadHistoryById(getSessionId(), "")
+        if (chatContainer) scrollToBottom(chatContainer);
     };
 
-    // Cancel button
     const cancelButton = document.createElement("button");
     cancelButton.className = "cancel-edit-btn";
     cancelButton.textContent = "取消";
     cancelButton.onclick = () => {
         messageElement.innerHTML = '';
-        updateMessage(messageElement, originalText, originalFiles);
+        updateMessage(messageElement, originalText, originalFilesData);
         editContainer.remove();
     };
 
-    // Assemble edit container components
-    buttonsContainer.appendChild(saveButton);
     buttonsContainer.appendChild(cancelButton);
+    buttonsContainer.appendChild(saveButton);
     editContainer.appendChild(textarea);
+    editContainer.appendChild(filesPreviewContainer);
     editContainer.appendChild(fileInput);
     editContainer.appendChild(buttonsContainer);
-
-    // Replace original content with edit container
     messageElement.innerHTML = '';
     messageElement.appendChild(editContainer);
-
-    // Adjust textarea height
     adjustTextareaHeight(textarea);
+    textarea.focus();
 }
 
 function updateMessage(messageElement, newText, newFiles) {
@@ -723,13 +980,15 @@ function updateMessage(messageElement, newText, newFiles) {
     textDiv.className = "message-text";
     textDiv.textContent = newText;
 
+    const editButtonDiv = document.createElement("div");
     const editButton = document.createElement("button");
     editButton.className = "edit-message-btn";
     editButton.innerHTML = '<i class="fas fa-edit"></i>';
+    editButtonDiv.appendChild(editButton);
     editButton.onclick = () => editMessage(messageElement, newText, newFiles);
 
     messageWrapper.appendChild(textDiv);
-    messageWrapper.appendChild(editButton);
+    messageWrapper.appendChild(editButtonDiv);
     messageElement.appendChild(messageWrapper);
 
     if (newFiles.length > 0) {
@@ -745,26 +1004,6 @@ function updateMessage(messageElement, newText, newFiles) {
 
         messageElement.appendChild(filesContainer);
     }
-}
-
-async function handleFileInput(fileInput) {
-    const files = Array.from(fileInput.files);
-    const fileBase64s = [];
-
-    for (const file of files) {
-        const base64 = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.readAsDataURL(file);
-        });
-
-        fileBase64s.push({
-            mimeType: file.type,
-            data: base64.split(',')[1]
-        });
-    }
-
-    return fileBase64s;
 }
 
 async function fetchChatResponse(userMessage, sessionId, content_id, fileBase64s, isReply) {
@@ -786,7 +1025,10 @@ async function getErrorMessage(response) {
     return errorData.message || 'Unknown error';
 }
 
-function createAIMessageElements(conversationContainer) {
+function createAIMessageElements(chatContainer) {
+    const aiConversationContainer = document.createElement("div");
+    aiConversationContainer.className = "conversation";
+
     const aiMessageElement = document.createElement("div");
     aiMessageElement.className = "message ai-message";
 
@@ -803,8 +1045,9 @@ function createAIMessageElements(conversationContainer) {
 
     const aiMessageElementOnCopy = document.createElement("span");
 
-    conversationContainer.appendChild(aiMessageElement);
-    return {aiMessageElement, aiMessageElementOnCopy};
+    aiConversationContainer.appendChild(aiMessageElement);
+    chatContainer.appendChild(aiConversationContainer);
+    return {aiConversationContainer, aiMessageElement, aiMessageElementOnCopy};
 }
 
 async function handleChatResponse(chatResponse, aiMessageElement, aiMessageElementOnCopy, chatContainer, userMessage) {
@@ -839,38 +1082,30 @@ async function handleChatResponse(chatResponse, aiMessageElement, aiMessageEleme
 }
 
 function setupScrollListener(chatContainer) {
+    if (!chatContainer) return
     const scrollToBottomButton = document.getElementById("scroll-to-bottom");
 
     chatContainer.addEventListener("wheel", (event) => {
+        // 稍微放宽判断是否在底部的条件，允许一些误差（例如 10 像素）
         const isAtBottom = chatContainer.scrollHeight - chatContainer.clientHeight <= chatContainer.scrollTop + 10;
 
         if (event.deltaY < 0) { // 向上滚动
             autoScroll = false;
-            scrollToBottomButton.style.display = "block"; // <--- 确保是设置 display
+            scrollToBottomButton.style.display = "block";
         } else if (!isAtBottom) { // 向下滚动 且 不在底部
-            // Keep autoScroll false if user initiated scroll
-            // autoScroll = false;
-            // Keep button visible if not at bottom
-            scrollToBottomButton.style.display = "block"; // <--- 确保是设置 display
+            autoScroll = false;
+            scrollToBottomButton.style.display = "block";
         } else {  // 向下滚动 且 在底部
             autoScroll = true;
-            scrollToBottomButton.style.display = "none"; // <--- 确保是设置 display
+            scrollToBottomButton.style.display = "none";
         }
     });
 
     scrollToBottomButton.addEventListener("click", () => {
         autoScroll = true;
         scrollToBottom(chatContainer); // 立即滚动到底部
-        scrollToBottomButton.style.display = "none"; // <--- 点击后隐藏
+        scrollToBottomButton.style.display = "none";
     });
-
-    // Initial check in case container is already scrollable but at bottom
-    if (chatContainer.scrollHeight > chatContainer.clientHeight &&
-        chatContainer.scrollHeight - chatContainer.clientHeight > chatContainer.scrollTop + 10) {
-        scrollToBottomButton.style.display = 'block';
-    } else {
-        scrollToBottomButton.style.display = 'none';
-    }
 }
 
 async function handleNewSession(userMessage, sessionId) {
@@ -960,6 +1195,9 @@ function handleError(conversationContainer, error) {
 }
 
 function scrollToBottom(container) {
+    if (!container) {
+        container = document.getElementById("chat-container")
+    }
     if (autoScroll) {
         // 使用requestAnimationFrame确保DOM更新后再滚动
         requestAnimationFrame(() => {
@@ -1021,7 +1259,7 @@ function addActionButtons(aiMessageElement, messageText) {
     const reanswer = document.createElement("button");
     reanswer.className = "reanswer-btn";
     reanswer.innerHTML = '<i class="fas fa-redo-alt"></i>';
-    reanswer.onclick = function (e) {
+    reanswer.onclick = async function (e) {
         if (e) {
             e.preventDefault();
             e.stopPropagation();
@@ -1131,9 +1369,9 @@ function addActionButtons(aiMessageElement, messageText) {
 
             // 删除当前对话容器
             conversationContainer.remove();
-
+            previousConversation.remove();
             // 调用发送消息函数
-            sendMessage(true);
+            await sendMessage(true);
         } catch (error) {
             console.error("重新回答时发生错误:", error);
         }
@@ -1290,9 +1528,11 @@ async function updateChatUI(id, historyData) {
                     messageWrapper.appendChild(textDiv);
 
                     // Add edit button
+                    const editButtonDiv = document.createElement("div");
                     const editButton = document.createElement("button");
                     editButton.className = "edit-message-btn";
                     editButton.innerHTML = '<i class="fas fa-edit"></i>';
+                    editButtonDiv.appendChild(editButton);
 
                     // 收集所有的 inlineData
                     content.parts.forEach(p => {
@@ -1302,7 +1542,7 @@ async function updateChatUI(id, historyData) {
                     });
 
                     editButton.onclick = () => editMessage(messageElement, part.text, inlineDataArray);
-                    messageWrapper.appendChild(editButton);
+                    messageWrapper.appendChild(editButtonDiv);
                     messageElement.appendChild(messageWrapper);
                     lastUserMessage = part.text;
                     flag = true;
@@ -1360,122 +1600,161 @@ async function updateChatUI(id, historyData) {
     adjustChatContainerHeight();
 }
 
-function fileUI(container, part, mimeType) {
+function fileUI(container, fileData, mimeType) {
+    if (!fileData || !fileData.data || !mimeType) {
+        console.error("Invalid data passed to fileUI:", fileData, mimeType);
+        container.textContent = "[无效文件数据]";
+        container.style.color = 'red';
+        return;
+    }
+    const base64Data = fileData.data;
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
+
+    container.innerHTML = ''; // Clear previous content
+
     if (mimeType.startsWith('image/')) {
-        // Handle images
+        // ... (image handling - no changes) ...
         const imgContainer = document.createElement("div");
         imgContainer.className = "image-thumbnail-container";
-
         const img = document.createElement("img");
-        img.src = `data:${mimeType};base64,${part.data}`;
+        img.src = dataUrl;
         img.className = "image-thumbnail";
-        img.alt = "Image preview";
-        img.loading = "lazy"; // 延迟加载
+        img.alt = "图片预览";
+        img.loading = "lazy";
         img.onclick = () => createMediaModal(img.src, 'image');
-
         imgContainer.appendChild(img);
         container.appendChild(imgContainer);
+
     } else if (mimeType.startsWith('video/')) {
-        // Handle videos
+        // ... (video handling - no changes) ...
         const videoContainer = document.createElement("div");
         videoContainer.className = "video-container";
-        videoContainer.style.maxWidth = "300px";
+        videoContainer.style.maxWidth = "300px"; // Or adjust as needed
         videoContainer.style.margin = "10px 0";
-
         const video = document.createElement("video");
-        video.src = `data:${mimeType};base64,${part.data}`;
+        video.src = dataUrl;
         video.controls = true;
-        video.style.width = "100%";
+        video.style.width = "100%"; // Videos usually handle width well
         video.style.borderRadius = "8px";
         video.style.border = "1px solid var(--border-color)";
         video.style.backgroundColor = "rgba(0, 0, 0, 0.1)";
+        video.style.display = 'block'; // Ensure block display
         video.style.cursor = "pointer";
         video.onclick = (e) => {
-            // 点击视频但不是控制按钮时，打开模态框
-            if (e.target === video) {
-                createMediaModal(video.src, 'video');
-            }
+            if (e.target === video) createMediaModal(video.src, 'video');
         };
-
         videoContainer.appendChild(video);
         container.appendChild(videoContainer);
+
     } else if (mimeType.startsWith('audio/')) {
-        // Handle audio
-        const audioContainer = document.createElement("div");
-        audioContainer.className = "audio-container";
-        audioContainer.style.margin = "10px 0";
-        audioContainer.style.padding = "10px";
-        audioContainer.style.borderRadius = "8px";
-        audioContainer.style.border = "1px solid var(--border-color)";
-        audioContainer.style.backgroundColor = "rgba(0, 0, 0, 0.03)";
+        // --- Audio Handling with Improved Sizing ---
+        const audioDisplayContainer = document.createElement("div");
+        audioDisplayContainer.className = "audio-display-container";
+        audioDisplayContainer.style.margin = "10px 0";
+        audioDisplayContainer.style.padding = "10px";
+        audioDisplayContainer.style.borderRadius = "8px";
+        audioDisplayContainer.style.border = "1px solid var(--border-color)";
+        audioDisplayContainer.style.backgroundColor = "var(--bg-color-secondary, rgba(0, 0, 0, 0.03))"; // Use secondary bg if available
+        audioDisplayContainer.style.boxSizing = "border-box"; // Include padding in width calc
+
+        // ** Sizing constraints for the container **
+        audioDisplayContainer.style.minWidth = "280px"; // Minimum width needed for controls (adjust if needed)
+        audioDisplayContainer.style.maxWidth = "100%";  // Don't exceed parent width
+
+        // Header: Icon and Filename
+        const audioHeader = document.createElement("div");
+        audioHeader.style.display = "flex";
+        audioHeader.style.alignItems = "center";
+        audioHeader.style.marginBottom = "8px";
 
         const audioIcon = document.createElement("i");
-        audioIcon.className = "fas fa-music";
+        audioIcon.className = "fas fa-music"; // Or far fa-file-audio
         audioIcon.style.marginRight = "10px";
-        audioIcon.style.color = "var(--text-color)";
+        audioIcon.style.color = "var(--text-secondary-color)";
+        audioIcon.style.fontSize = "1.2em";
+        audioHeader.appendChild(audioIcon);
 
+        const fileExtension = getFileType(mimeType);
+        const fileNameSpan = document.createElement("span");
+        fileNameSpan.textContent = `audio.${fileExtension}`;
+        fileNameSpan.style.fontSize = "14px";
+        fileNameSpan.style.fontWeight = "500";
+        fileNameSpan.style.overflow = "hidden";
+        fileNameSpan.style.whiteSpace = "nowrap";
+        fileNameSpan.style.textOverflow = "ellipsis";
+        // Allow filename to shrink if needed, but prevent wrapping
+        fileNameSpan.style.minWidth = '0';
+        audioHeader.appendChild(fileNameSpan);
+
+        audioDisplayContainer.appendChild(audioHeader);
+
+        // Audio Element with Controls
         const audio = document.createElement("audio");
-        audio.src = `data:${mimeType};base64,${part.data}`;
+        audio.src = dataUrl;
         audio.controls = true;
-        audio.style.width = "calc(100% - 30px)";
+        // ** Remove explicit width: 100% from audio element **
+        // audio.style.width = "100%"; // REMOVED
+        audio.style.display = "block"; // Keep block display
+        audio.style.maxWidth = "100%"; // Ensure audio element itself doesn't overflow container
 
-        audioContainer.appendChild(audioIcon);
-        audioContainer.appendChild(audio);
-        container.appendChild(audioContainer);
-    } else if (mimeType.startsWith('text/') || mimeType === 'application/pdf') {
-        // Handle text files and PDFs
+
+        audioDisplayContainer.appendChild(audio);
+        container.appendChild(audioDisplayContainer);
+        // --- End Audio Handling ---
+
+    } else { // Handle other files (PDF, Text, Generic)
+        // ... (handling for other files - minor change for consistency) ...
         const fileContainer = document.createElement("div");
         fileContainer.className = "file-link-container";
+        fileContainer.style.display = "flex";
+        fileContainer.style.alignItems = "center";
+        fileContainer.style.padding = "8px 12px";
+        fileContainer.style.margin = "8px 0";
+        fileContainer.style.backgroundColor = "var(--bg-color)";
+        fileContainer.style.border = "1px solid var(--border-color)";
+        fileContainer.style.borderRadius = "6px";
 
         const fileIcon = document.createElement("i");
         fileIcon.className = getFileIcon(mimeType);
+        fileIcon.style.marginRight = "10px";
+        fileIcon.style.fontSize = "1.2em";
+        fileIcon.style.color = "var(--text-secondary-color)";
 
         const fileName = document.createElement("span");
-        fileName.textContent = getFileType(mimeType);
+        fileName.textContent = `file.${getFileType(mimeType)}`; // Consistent naming
         fileName.style.marginRight = "auto";
+        fileName.style.fontSize = "14px";
+        fileName.style.overflow = "hidden";
+        fileName.style.whiteSpace = "nowrap";
+        fileName.style.textOverflow = "ellipsis";
+        fileName.style.minWidth = '0'; // Allow shrinking
 
         const buttonsContainer = document.createElement("div");
         buttonsContainer.style.display = "flex";
+        buttonsContainer.style.alignItems = "center";
+        buttonsContainer.style.marginLeft = "10px";
+        buttonsContainer.style.flexShrink = "0"; // Prevent buttons wrapping
 
-        const previewButton = document.createElement("button");
-        previewButton.className = "file-preview-btn";
-        previewButton.innerHTML = '<i class="far fa-eye"></i> 预览';
-        previewButton.onclick = () => createDocumentModal(part.data, mimeType);
+        if (mimeType === 'application/pdf' || mimeType.startsWith('text/')) {
+            const previewButton = document.createElement("button");
+            previewButton.className = "file-action-btn file-preview-btn";
+            previewButton.innerHTML = '<i class="far fa-eye"></i>';
+            previewButton.title = "预览";
+            previewButton.onclick = () => createDocumentModal(base64Data, mimeType);
+            buttonsContainer.appendChild(previewButton);
+        }
 
         const downloadLink = document.createElement("a");
-        downloadLink.href = `data:${mimeType};base64,${part.data}`;
+        downloadLink.href = dataUrl;
         downloadLink.download = `file.${getFileType(mimeType).toLowerCase()}`;
-        downloadLink.className = "file-download-btn";
-        downloadLink.innerHTML = '<i class="fas fa-download"></i> 下载';
-
-        buttonsContainer.appendChild(previewButton);
+        downloadLink.className = "file-action-btn file-download-btn";
+        downloadLink.innerHTML = '<i class="fas fa-download"></i>';
+        downloadLink.title = "下载";
         buttonsContainer.appendChild(downloadLink);
 
         fileContainer.appendChild(fileIcon);
         fileContainer.appendChild(fileName);
         fileContainer.appendChild(buttonsContainer);
-        container.appendChild(fileContainer);
-    } else {
-        // Handle other files with download only
-        const fileContainer = document.createElement("div");
-        fileContainer.className = "file-link-container";
-
-        const fileIcon = document.createElement("i");
-        fileIcon.className = getFileIcon(mimeType);
-
-        const fileName = document.createElement("span");
-        fileName.textContent = getFileType(mimeType);
-        fileName.style.marginRight = "auto";
-
-        const downloadLink = document.createElement("a");
-        downloadLink.href = `data:${mimeType};base64,${part.data}`;
-        downloadLink.download = `file.${getFileType(mimeType).toLowerCase()}`;
-        downloadLink.className = "file-download-btn";
-        downloadLink.innerHTML = '<i class="fas fa-download"></i> 下载';
-
-        fileContainer.appendChild(fileIcon);
-        fileContainer.appendChild(fileName);
-        fileContainer.appendChild(downloadLink);
         container.appendChild(fileContainer);
     }
 }
@@ -1642,17 +1921,16 @@ async function loadHistoryById(id, title) {
 
         // 在历史记录中添加高亮效果
         highlightActiveHistory(id);
-
         // 在完成加载后调整高度
         setTimeout(() => {
             adjustChatContainerHeight();
-            scrollToBottom(document.getElementById("chat-container"));
+            if (title !== "") {
+                setupScrollListener(document.getElementById("chat-container"));
+                scrollToBottom(document.getElementById("chat-container"));
+            }
         }, 200);
-
-        return true;
     } catch (error) {
         console.error("Failed to load history:", error);
-        return false;
     }
 }
 
@@ -2058,15 +2336,23 @@ function getFileIcon(mimeType) {
         return 'far fa-file-archive';
     } else if (mimeType === 'text/plain' || mimeType === 'text/rtf' || mimeType.includes('markdown') || mimeType === 'text/md') { // **新增: RTF, Markdown 并与 Plain Text 合并**
         return 'far fa-file-alt';
-    } else if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') {
-        return 'far fa-file-code';
-    } else if (mimeType.includes('javascript') || mimeType.includes('python')) {
-        return 'far fa-file-code';
+    } else if (
+        mimeType === 'text/html' ||
+        mimeType === 'application/xhtml+xml' ||
+        mimeType === 'text/css' || // <--- 添加了 CSS 支持
+        mimeType.includes('javascript') || // 涵盖 text/javascript, application/javascript 等
+        mimeType.includes('python') ||     // 涵盖 text/x-python, application/x-python-code 等
+        mimeType === 'application/json' || // 可选：添加 JSON 支持
+        mimeType.includes('xml') && mimeType !== 'application/xhtml+xml' // 可选：添加通用 XML 支持 (排除 XHTML)
+    ) {
+        return 'far fa-file-code'; // 将 HTML, CSS, JS, Python, JSON, XML 归为代码文件
     } else {
-        return 'far fa-file';
+        return 'far fa-file'; // 默认图标
     }
 }
 
 function getFileType(mimeType) {
-    return mimeType.split('/')[1].toUpperCase();
+    if (!mimeType) return 'bin';
+    const parts = mimeType.split('/');
+    return parts[1] ? parts[1].replace(/[^a-z0-9]/gi, '').toLowerCase() : 'bin';
 }

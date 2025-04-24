@@ -26,7 +26,6 @@ var (
 	GeminiApiKey       = ""
 )
 
-// CustomMIMEs - A set of commonly encountered MIME types.
 var CustomMIMEs = map[string]struct{}{
 	"application/pdf":          {},
 	"application/x-javascript": {},
@@ -34,6 +33,12 @@ var CustomMIMEs = map[string]struct{}{
 	"text/plain":               {},
 	"text/html":                {},
 	"text/css":                 {},
+	"text/javascript":          {},
+	"text/md":                  {},
+	"text/csv":                 {},
+	"text/xml":                 {},
+	"text/rtf":                 {},
+	"image/png":                {},
 	"image/jpeg":               {},
 	"image/webp":               {},
 	"image/heic":               {},
@@ -77,7 +82,6 @@ var CustomMIMEs = map[string]struct{}{
 	"audio/x-m4a":                  {},
 	"audio/x-ms-wma":               {},
 	"video/quicktime":              {},
-	"text/javascript":              {},
 	"text/x-python":                {},
 	"application/xml":              {},
 	"application/rtf":              {},
@@ -223,6 +227,7 @@ func BuildAIApi(DefaultModel, ContentType string) string {
 		"gemini-2.0-flash-exp":          EnvMap["GEMINI_MODEL_2_EXP"],
 		"gemini-2.0-flash-thinking-exp": EnvMap["GEMINI_MODEL_2.0_Thinking"],
 		"gemini-2.5-pro":                EnvMap["GEMINI_MODEL_2.5_PRO"],
+		"gemeni-2.5-flash":              EnvMap["GEMINI_MODEL_2.5_FLASH"],
 		"gemini-2.0-pro":                EnvMap["GEMINI_MODEL_2.0_PRO"],
 		"gemini-exp-1206":               EnvMap["GEMINI_MODEL_1206"],
 	}
