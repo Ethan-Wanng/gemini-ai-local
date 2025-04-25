@@ -426,6 +426,7 @@ function formatFileSize(size) {
 }
 
 let originalHeight = ""
+let isStopped = false;
 
 async function sendMessage(isReply) {
     const inputField = document.getElementById("user-input");
@@ -526,18 +527,29 @@ async function sendMessage(isReply) {
     }
 
     changeModel()
-
+    const saveButton = document.getElementById("send-button")
     try {
         let sessionId = getSessionId();
         let flag = !sessionId;
-
-        const chatResponse = await fetchChatResponse(userMessage, sessionId, content_id, fileBase64s, isReply);
+        const abortController = new AbortController();
+        const chatResponse = await fetchChatResponse(userMessage, sessionId, content_id, fileBase64s, isReply, {signal: abortController.signal});
         if (!chatResponse.ok) {
             if (chatResponse.status === 429) {
                 throw new Error('发生了错误，请切换模型并刷新重试');
             }
             throw new Error(`Chat API error: ${chatResponse.status} - ${await getErrorMessage(chatResponse)}`);
         }
+        // 变成 Stop 按钮
+        saveButton.innerHTML = `<i class="fas fa-stop"></i>`;
+        isStopped = true;
+
+        saveButton.onclick = async () => {
+            // 发送 stop 信号到后端
+            await fetch("/stop", {method: "POST"});
+            setTimeout(() => {
+                abortController.abort();
+            }, 1000);
+        };
 
         await handleChatResponse(chatResponse, aiMessageElement, aiMessageElementOnCopy, chatContainer, userMessage);
 
@@ -570,6 +582,11 @@ async function sendMessage(isReply) {
 
         // 再次确保调整高度
         setTimeout(adjustChatContainerHeight, 200);
+        // 变回提交按钮
+        setTimeout(() => {
+            saveButton.innerHTML = `<i class="fas fa-paper-plane"></i>`;
+            isStopped = false;
+        }, 100);
     }
 }
 
@@ -692,11 +709,9 @@ async function editMessage(messageElement, originalText, originalFilesData = [])
     filesPreviewContainer.style.border = "1px dashed var(--border-color)";
     filesPreviewContainer.style.borderRadius = "4px";
 
-
     let currentFiles = [];
     let fileCounter = 0;
 
-    // --- renderEditFileItem: Ensure name shows for audio, no click preview for audio icon ---
     function renderEditFileItem(fileObject) {
         const fileDiv = document.createElement("div");
         fileDiv.className = "edit-file-item";
@@ -840,10 +855,6 @@ async function editMessage(messageElement, originalText, originalFilesData = [])
         filesPreviewContainer.appendChild(fileDiv);
     }
 
-    // --- End of updated renderEditFileItem ---
-
-
-    // --- Process original/new files, Buttons, Assembly (No changes needed below) ---
     originalFilesData.forEach((fileData, index) => {
         const blob = base64ToBlob(fileData.data, fileData.mimeType);
         const fileObject = {
@@ -1006,7 +1017,7 @@ function updateMessage(messageElement, newText, newFiles) {
     }
 }
 
-async function fetchChatResponse(userMessage, sessionId, content_id, fileBase64s, isReply) {
+async function fetchChatResponse(userMessage, sessionId, content_id, fileBase64s, isReply, options = {}) {
     return fetch("/chat", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -1017,6 +1028,7 @@ async function fetchChatResponse(userMessage, sessionId, content_id, fileBase64s
             files: fileBase64s,
             is_reply: !!isReply // 确保是布尔值
         }),
+        signal: options.signal
     });
 }
 

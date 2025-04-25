@@ -24,6 +24,7 @@ var (
 	DefaultModelInt    = "gemini-2.0-flash"
 	HttpState          = 200
 	GeminiApiKey       = ""
+	IsStopSSE          = false
 )
 
 var CustomMIMEs = map[string]struct{}{

@@ -24,7 +24,12 @@ func Register() *http.ServeMux {
 	r.HandleFunc("DELETE /deleteHistory/{id}", handleDeleteHistory)
 	r.HandleFunc("PUT /edit-history/{sessionId}", handleEditHistoryTitle)
 	r.HandleFunc("GET /getTwoLastContent/{sessionId}", handleTwoLastContent)
+	r.HandleFunc("POST /stop", handleStop)
 	return r
+}
+
+func handleStop(w http.ResponseWriter, r *http.Request) {
+	configuration.IsStopSSE = true
 }
 
 func handleTwoLastContent(w http.ResponseWriter, r *http.Request) {

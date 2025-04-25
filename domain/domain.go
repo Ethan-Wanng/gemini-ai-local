@@ -151,6 +151,9 @@ var Result strings.Builder
 
 // 处理 SSE 流式数据
 func (r *RequestBody) handleSSEResponse(w http.ResponseWriter, resp *http.Response) error {
+	defer func() {
+		configuration.IsStopSSE = false
+	}()
 	// 设置响应头
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -194,6 +197,9 @@ func (r *RequestBody) handleSSEResponse(w http.ResponseWriter, resp *http.Respon
 		// 输出候选内容并收集到 result 中
 		for _, candidate := range geminiResponse.Candidates {
 			for _, part := range candidate.Content.Parts {
+				if configuration.IsStopSSE {
+					return nil
+				}
 				Result.WriteString(fmt.Sprint(part.Text))   // 将文本追加到 result 中
 				_, _ = fmt.Fprint(w, fmt.Sprint(part.Text)) // 继续实时输出到客户端
 				w.(http.Flusher).Flush()                    // 刷新流，保持 SSE 连接
