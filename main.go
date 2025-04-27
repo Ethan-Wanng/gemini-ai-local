@@ -9,6 +9,7 @@ import "C"
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"github.com/Dreamacro/clash/config"
 	"github.com/Dreamacro/clash/hub/executor"
@@ -48,10 +49,6 @@ var selectedDescription = fmt.Sprintln(fmt.Sprint(`使用的AI : Google Gemini
 	`))
 
 func init() {
-	// Show initialization dialog
-	go func() {
-		walk.MsgBox(nil, "初始化", "初始化中，请等待...", walk.MsgBoxIconInformation)
-	}()
 
 	var initErr error
 	defer func() {
@@ -147,10 +144,6 @@ func init() {
 			return
 		}
 	}
-
-	// Close the initialization dialog by showing a success message
-	walk.MsgBox(nil, "初始化完成", "程序初始化成功！",
-		walk.MsgBoxIconInformation|walk.MsgBoxOK)
 }
 
 // 添加端口检查函数
@@ -258,7 +251,7 @@ func onReady() {
 	}
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
 	}()

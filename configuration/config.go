@@ -254,7 +254,7 @@ func BuildAIApi(DefaultModel, ContentType string) string {
 }
 
 func VerifyGoogleAccess() error {
-	testURL := "https://youtube.com"
+	testURL := "https://google.com"
 	timeout := 3 * time.Second
 
 	clientWithPort := *HttpClientWithPort
@@ -285,7 +285,7 @@ func VerifyGoogleAccess() error {
 	}
 
 	if CurrentClient == nil {
-		return fmt.Errorf("Gemini API not initialized")
+		return fmt.Errorf("网络代理失败")
 	}
 	return nil
 }

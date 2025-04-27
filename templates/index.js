@@ -502,6 +502,7 @@ async function sendMessage(isReply) {
     const conversationContainer = createConversationContainer(userMessage, fileBase64s);
     chatContainer.appendChild(conversationContainer);
 
+    scrollToBottom(chatContainer);
     if (uploadedFilesInfo) {
         uploadedFilesInfo.innerHTML = ""
         uploadedFilesInfo.style.display = "none"; // Hide the file info container
@@ -544,11 +545,17 @@ async function sendMessage(isReply) {
         isStopped = true;
 
         saveButton.onclick = async () => {
-            // 发送 stop 信号到后端
-            await fetch("/stop", {method: "POST"});
-            setTimeout(() => {
-                abortController.abort();
-            }, 1000);
+            if (isStopped) {
+                // 发送 stop 信号到后端
+                await fetch("/stop", {method: "POST"});
+                setTimeout(() => {
+                    abortController.abort();
+                }, 1000);
+
+                isStopped = false;
+            } else {
+                await sendMessage(false);
+            }
         };
 
         await handleChatResponse(chatResponse, aiMessageElement, aiMessageElementOnCopy, chatContainer, userMessage);
@@ -924,42 +931,50 @@ async function editMessage(messageElement, originalText, originalFilesData = [])
     saveButton.textContent = "提交";
     saveButton.style.marginLeft = "10px";
     saveButton.onclick = async () => { /* ... save logic ... */
-        const chatContainer = document.getElementById("chat-container");
-        const globalFileInput = document.getElementById("file-input");
-        const inputField = document.getElementById("user-input");
-        const newText = textarea.value.trim();
-        const conversation = messageElement.closest('.conversation');
-        const content_id = conversation ? conversation.dataset.content_id : null;
+        if (isStopped) {
+            // 发送 stop 信号到后端
+            await fetch("/stop", {method: "POST"});
+            setTimeout(() => {
+                abortController.abort();
+            }, 1000);
+        } else {
+            const chatContainer = document.getElementById("chat-container");
+            const globalFileInput = document.getElementById("file-input");
+            const inputField = document.getElementById("user-input");
+            const newText = textarea.value.trim();
+            const conversation = messageElement.closest('.conversation');
+            const content_id = conversation ? conversation.dataset.content_id : null;
 
-        if (!newText && currentFiles.length === 0) {
-            alert("请输入消息内容或添加文件。");
-            return;
+            if (!newText && currentFiles.length === 0) {
+                alert("请输入消息内容或添加文件。");
+                return;
+            }
+
+            const dt = new DataTransfer();
+            let totalSize = 0;
+            for (const fileObj of currentFiles) {
+                const blob = base64ToBlob(fileObj.dataUrl, fileObj.mimeType);
+                const file = new File([blob], fileObj.name, {type: fileObj.mimeType});
+                dt.items.add(file);
+                totalSize += file.size;
+            }
+
+            const maxSize = 200 * 1024 * 1024;
+            if (totalSize > maxSize) {
+                alert(`文件总大小 (${formatFileSize(totalSize)}) 超过了 200MB 限制。请移除一些文件。`);
+                return;
+            }
+
+            inputField.value = newText;
+            if (content_id) inputField.dataset.content_id = content_id; else inputField.dataset.content_id = "";
+            globalFileInput.files = dt.files;
+
+            editContainer.remove();
+            autoScroll = true;
+            await sendMessage(true);
+            await loadHistoryById(getSessionId(), "");
+            if (chatContainer) scrollToBottom(chatContainer);
         }
-
-        const dt = new DataTransfer();
-        let totalSize = 0;
-        for (const fileObj of currentFiles) {
-            const blob = base64ToBlob(fileObj.dataUrl, fileObj.mimeType);
-            const file = new File([blob], fileObj.name, {type: fileObj.mimeType});
-            dt.items.add(file);
-            totalSize += file.size;
-        }
-
-        const maxSize = 200 * 1024 * 1024;
-        if (totalSize > maxSize) {
-            alert(`文件总大小 (${formatFileSize(totalSize)}) 超过了 200MB 限制。请移除一些文件。`);
-            return;
-        }
-
-        inputField.value = newText;
-        if (content_id) inputField.dataset.content_id = content_id; else inputField.dataset.content_id = "";
-        globalFileInput.files = dt.files;
-
-        editContainer.remove();
-        autoScroll = true;
-        await sendMessage(true);
-        await loadHistoryById(getSessionId(), "")
-        if (chatContainer) scrollToBottom(chatContainer);
     };
 
     const cancelButton = document.createElement("button");
@@ -1330,7 +1345,7 @@ function addActionButtons(aiMessageElement, messageText) {
             if (fileContainers && fileContainers.length > 0) {
                 const dataTransfer = new DataTransfer();
 
-                fileContainers.forEach((container, index) => {
+                fileContainers.forEach((container) => {
 
                     // 检查媒体元素
                     const mediaElement = container.querySelector('img, video, audio');
@@ -1381,9 +1396,9 @@ function addActionButtons(aiMessageElement, messageText) {
 
             // 删除当前对话容器
             conversationContainer.remove();
-            previousConversation.remove();
             // 调用发送消息函数
             await sendMessage(true);
+            await loadHistoryById(getSessionId(), "");
         } catch (error) {
             console.error("重新回答时发生错误:", error);
         }
@@ -1430,14 +1445,30 @@ function addActionButtons(aiMessageElement, messageText) {
     aiMessageElement.appendChild(actionButtons);
 }
 
-function base64ToBlob(base64, mimeType) {
-    const byteString = atob(base64);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i);
+// Helper to convert Base64 Data URL or base64 string to Blob
+function base64ToBlob(base64Input, mimeType) {
+    let base64 = base64Input;
+    // Check if it's a Data URL and extract base64 part
+    if (base64Input.startsWith('data:')) {
+        base64 = base64Input.split(',')[1];
     }
-    return new Blob([ab], {type: mimeType});
+
+    if (!base64) {
+        console.error("Invalid base64 data provided to base64ToBlob:", base64Input.substring(0, 50) + '...');
+        return new Blob([], {type: mimeType});
+    }
+    try {
+        const byteString = atob(base64);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([ab], {type: mimeType});
+    } catch (e) {
+        console.error("Error decoding base64 string in base64ToBlob:", e);
+        return new Blob([], {type: mimeType});
+    }
 }
 
 document.addEventListener('keydown', function (event) {
