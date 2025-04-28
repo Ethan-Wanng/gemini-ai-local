@@ -172,12 +172,31 @@ function changeModel() {
 let uploadedFiles = [];
 
 function handlePaste(event) {
-    // Check if the paste event contains files
-    if (event.clipboardData.files.length > 0) {
+    const fileInput = document.getElementById("file-input");
+    const textarea = document.getElementById("user-input");
+    const clipboardData = event.clipboardData || window.clipboardData;
+
+    // 1. 处理文件
+    if (clipboardData.files && clipboardData.files.length > 0) {
+        handleFiles(clipboardData.files);
+        // 让 fileInput.files 跟随
+        if (fileInput) fileInput.files = clipboardData.files;
+    }
+
+    // 2. 处理文本（如果有）
+    const text = clipboardData.getData("text");
+    if (text && textarea) {
+        // 阻止默认行为，手动插入文本
         event.preventDefault();
-        handleFiles(event.clipboardData.files);
-        const fileInput = document.getElementById("file-input");
-        fileInput.files = event.clipboardData.files;
+        // 在光标处插入文本
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const value = textarea.value;
+        textarea.value = value.slice(0, start) + text + value.slice(end);
+        // 移动光标到插入文本后
+        textarea.selectionStart = textarea.selectionEnd = start + text.length;
+        // 触发高度自适应
+        adjustTextareaHeight(textarea);
     }
 }
 
@@ -617,6 +636,13 @@ function createConversationContainer(userMessage, fileBase64s = []) {
     editButton.onclick = () => editMessage(userMessageElement, userMessage, fileBase64s);
     editButtonDiv.appendChild(editButton);
 
+    // Add copy userMessage button
+    const copyButton = document.createElement("button");
+    copyButton.className = "copy-message-btn";
+    copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+    copyButton.onclick = () => copyMessage(userMessageElement, userMessage, fileBase64s);
+    editButtonDiv.appendChild(copyButton);
+
     // Handle the text message
     const textDiv = document.createElement("div");
     textDiv.className = "message-text";
@@ -676,6 +702,88 @@ function readFileAsBase64(file) {
             reject(e);
         }
     });
+}
+
+async function copyMessage(userMessageElement, userMessage, fileBase64s) {
+    // 检查浏览器是否支持 Clipboard API 和 ClipboardItem
+    if (!navigator.clipboard || !window.ClipboardItem) {
+        // 只复制文本的降级方案
+        if (userMessage) {
+            navigator.clipboard.writeText(userMessage)
+                .then(() => {
+                    showCopyFeedback(userMessageElement, true);
+                })
+                .catch(() => {
+                    showCopyFeedback(userMessageElement, false);
+                });
+        } else {
+            alert("您的浏览器不支持复制文件，且无文本内容可复制。");
+        }
+        return;
+    }
+
+    try {
+        // 准备要放入 ClipboardItem 的数据
+        const clipboardItemsData = {};
+        if (userMessage && userMessage.trim() !== '') {
+            clipboardItemsData['text/plain'] = new Blob([userMessage], {type: 'text/plain'});
+        }
+
+        // 2. 添加文件数据 (如果存在)
+        if (fileBase64s && fileBase64s.length > 0) {
+            console.log(`Preparing ${fileBase64s.length} file(s) for clipboard...`);
+            for (const fileData of fileBase64s) {
+                if (fileData.data && fileData.mimeType) {
+                    try {
+                        // 将 base64 转换为 Blob
+                        const blob = base64ToBlob(fileData.data, fileData.mimeType);
+                        clipboardItemsData[fileData.mimeType] = blob;
+                    } catch (e) {
+                        console.error(`无法处理文件 (MIME: ${fileData.mimeType}):`, e);
+                        // 可以选择性地通知用户哪个文件失败了
+                        alert(`处理文件（类型：${fileData.mimeType}）时出错，该文件未被复制。`);
+                    }
+                } else {
+                    console.warn("跳过无效的文件数据:", fileData);
+                }
+            }
+        }
+
+        // 检查是否有任何内容可以复制
+        if (Object.keys(clipboardItemsData).length === 0) {
+            console.log("Nothing to copy.");
+            alert("没有可复制的内容（无文本或有效文件）。");
+            return;
+        }
+
+        const clipboardItem = new ClipboardItem(clipboardItemsData);
+        await navigator.clipboard.write([clipboardItem]);
+        showCopyFeedback(userMessageElement, true);
+    } catch (err) {
+        showCopyFeedback(userMessageElement, false);
+    }
+}
+
+// 统一的按钮反馈函数
+function showCopyFeedback(userMessageElement, success) {
+    // 查找复制按钮
+    const copyBtn = userMessageElement.querySelector('.copy-message-btn');
+    if (!copyBtn) return;
+    const originalText = copyBtn.innerHTML;
+    if (success) {
+        copyBtn.innerHTML = '<i class="fas fa-check"></i> 已复制';
+        copyBtn.style.backgroundColor = "rgba(76, 175, 80, 0.2)";
+        copyBtn.style.color = "#4CAF50";
+    } else {
+        copyBtn.innerHTML = '<i class="fas fa-times"></i> 复制失败';
+        copyBtn.style.backgroundColor = "rgba(244, 67, 54, 0.2)";
+        copyBtn.style.color = "#f44336";
+    }
+    setTimeout(() => {
+        copyBtn.innerHTML = originalText;
+        copyBtn.style.backgroundColor = "";
+        copyBtn.style.color = "";
+    }, 1000);
 }
 
 /**
@@ -1103,7 +1211,7 @@ async function handleChatResponse(chatResponse, aiMessageElement, aiMessageEleme
             throw error;
         }
     } finally {
-        addActionButtons(aiMessageElement, userMessage);
+        addActionButtons(aiMessageElement, partialResponse);
         enableCodeCopy();
     }
 }
@@ -1577,6 +1685,11 @@ async function updateChatUI(id, historyData) {
                     editButton.innerHTML = '<i class="fas fa-edit"></i>';
                     editButtonDiv.appendChild(editButton);
 
+                    // Add copy userMessage button
+                    const copyUserMessageButton = document.createElement("button");
+                    copyUserMessageButton.className = "copy-message-btn";
+                    copyUserMessageButton.innerHTML = '<i class="fas fa-copy"></i>';
+                    editButtonDiv.appendChild(copyUserMessageButton);
                     // 收集所有的 inlineData
                     content.parts.forEach(p => {
                         if (p.inlineData) {
@@ -1585,6 +1698,7 @@ async function updateChatUI(id, historyData) {
                     });
 
                     editButton.onclick = () => editMessage(messageElement, part.text, inlineDataArray);
+                    copyUserMessageButton.onclick = () => copyMessage(messageElement, part.text, inlineDataArray);
                     messageWrapper.appendChild(editButtonDiv);
                     messageElement.appendChild(messageWrapper);
                     lastUserMessage = part.text;
