@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/wangArtsoar/gemini-ai/gemini_util"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -465,6 +467,16 @@ func PostRequestOnClient(input configuration.UserInput) (*http.Response, error) 
 	return resp, nil
 }
 
+type HistoryPO struct {
+	SessionID  int64
+	ContentID  sql.NullInt64
+	Role       sql.NullString
+	PartID     sql.NullInt64
+	Text       sql.NullString
+	InlineData []byte
+	MediaType  sql.NullString
+}
+
 func FindHistoryBySessionID(db *sql.DB, sessionID int64, isNeedContentID bool) (*RequestBody, error) {
 	sqlHistory := `
 	SELECT s.id, c.id, c.role, p.id,p.text, id.data, id.media_type
@@ -483,19 +495,9 @@ func FindHistoryBySessionID(db *sql.DB, sessionID int64, isNeedContentID bool) (
 
 	defer rows.Close()
 
-	type result struct {
-		SessionID  int64
-		ContentID  sql.NullInt64
-		Role       sql.NullString
-		PartID     sql.NullInt64
-		Text       sql.NullString
-		InlineData []byte
-		MediaType  sql.NullString
-	}
-
-	var results []result
+	var results []HistoryPO
 	for rows.Next() {
-		var res result
+		var res HistoryPO
 		err = rows.Scan(&res.SessionID, &res.ContentID, &res.Role, &res.PartID, &res.Text, &res.InlineData, &res.MediaType)
 		if err != nil {
 			return nil, err
@@ -773,4 +775,123 @@ func GetTwoLastContent(db *sql.DB, sessionID int64) (*int64, *int64, error) {
 	}
 
 	return &ids[1], &ids[0], nil
+}
+
+/*
+	{DateTime}
+	User :
+	{Input}
+
+	AI :
+	{Output}
+
+	{DateTime}
+	User :
+	{Input}
+
+	AI :
+	{Output}
+*/
+// Share 将指定 session 的对话以 Markdown 格式打包下载
+func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
+	history, err := FindHistoryBySessionID(db, sessionID, false)
+	if err != nil {
+		return err
+	}
+	if len(history.Contents) == 0 {
+		http.Error(w, "No content", http.StatusNoContent)
+		return nil
+	}
+
+	session, err := FindSessionByID(db, sessionID)
+	if err != nil {
+		return err
+	}
+	rawTitle := session.Title
+	// 最终要下载的文件名
+	filename := rawTitle + ".md"
+
+	// 设置 Content-Disposition，包含 filename 和 filename*
+	disposition := fmt.Sprintf(
+		"attachment; filename=\"%s\"; filename*=UTF-8''%s",
+		filename,
+		url.PathEscape(filename), // URL-encode UTF-8 字符串
+	)
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", disposition)
+
+	for _, c := range history.Contents {
+		// 时间戳
+		var ts time.Time
+		if c.ContentID != nil {
+			ts = time.Unix(*c.ContentID/1000, (*c.ContentID%1000)*1e6)
+		} else {
+			ts = time.Now()
+		}
+		fmt.Fprintf(w, "**%s**  \n", ts.Format("2006-01-02 15:04:05"))
+
+		// 角色
+		label := "AI"
+		if c.Role == "user" {
+			label = "用户"
+		}
+		fmt.Fprintf(w, "**%s**：\n", label)
+
+		// 聚合 parts
+		for _, p := range c.Parts {
+			// 文本
+			if p.Text != "" {
+				// 每行末尾两个空格保留换行
+				fmt.Fprint(w, strings.ReplaceAll(p.Text, "\n", "  \n"))
+			}
+			// 内联二进制
+			if p.InlineData != nil && len(p.InlineData.Data) > 0 {
+				mime := p.InlineData.MimeType
+				b64 := base64.StdEncoding.EncodeToString(p.InlineData.Data)
+				dataURI := fmt.Sprintf("data:%s;base64,%s", mime, b64)
+
+				switch {
+				case strings.HasPrefix(mime, "image/"):
+					// Markdown 图片
+					fmt.Fprintf(w, "\n\n![inline image](%s)\n\n", dataURI)
+
+				case strings.HasPrefix(mime, "video/"):
+					// HTML5 Video
+					fmt.Fprintf(w,
+						"\n\n<video controls width=\"480\">\n"+
+							"  <source src=\"%s\" type=\"%s\" />\n"+
+							"  Your browser does not support the video tag.\n"+
+							"</video>\n\n",
+						dataURI, mime)
+
+				case strings.HasPrefix(mime, "audio/"):
+					// HTML5 Audio
+					fmt.Fprintf(w,
+						"\n\n<audio controls>\n"+
+							"  <source src=\"%s\" type=\"%s\" />\n"+
+							"  Your browser does not support the audio element.\n"+
+							"</audio>\n\n",
+						dataURI, mime)
+				default:
+					// 1) 确保有 ContentID
+					cid := int64(0)
+					if c.ContentID != nil {
+						cid = *c.ContentID
+					}
+					ext := ""
+					_, ok := configuration.CustomMIMEs[mime]
+					if !ok {
+						// fallback
+						ext = ".bin"
+					}
+
+					filename := fmt.Sprintf("%d%s", cid, ext)
+					fmt.Fprintf(w, "\n\n[%s 下载](%s)\n\n", filename, dataURI)
+				}
+			}
+		}
+		// 段落分隔
+		fmt.Fprint(w, "\n")
+	}
+	return nil
 }

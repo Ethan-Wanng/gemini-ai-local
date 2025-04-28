@@ -311,7 +311,7 @@ li.active {
     font-weight: 500;
 }
 
-#theme-toggle, #export-pdf, #new-conversation-button {
+#theme-toggle, #share, #new-conversation-button {
     background-color: transparent;
     color: white;
     border: none;
@@ -338,7 +338,7 @@ li.active {
     transform: translateY(-1px);
 }
 
-#theme-toggle:hover, #export-pdf:hover {
+#theme-toggle:hover, #share:hover {
     background-color: rgba(255, 255, 255, 0.2);
     transform: translateY(-1px);
 }

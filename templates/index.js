@@ -623,6 +623,18 @@ function createConversationContainer(userMessage, fileBase64s = []) {
     const userMessageElement = document.createElement("div");
     userMessageElement.className = "message user-message";
     userMessageElement.style.whiteSpace = "pre-wrap";
+    if (fileBase64s.length > 0) {
+        const filesContainer = document.createElement("div");
+        filesContainer.className = "files-container";
+
+        // 直接遍历原始的 fileBase64s 数组
+        fileBase64s.forEach(file => { // <--- 使用 fileBase64s 而不是 sortedFiles
+            const mimeType = file.mimeType || file.type; // 注意: sendMessage 中用的是 mimeType，这里统一一下
+            fileUI(filesContainer, file, mimeType);
+        });
+
+        userMessageElement.appendChild(filesContainer);
+    }
 
     // Create wrapper for message content and edit button
     const messageWrapper = document.createElement("div");
@@ -651,19 +663,6 @@ function createConversationContainer(userMessage, fileBase64s = []) {
     messageWrapper.appendChild(textDiv);
     messageWrapper.appendChild(editButtonDiv);
     userMessageElement.appendChild(messageWrapper);
-
-    if (fileBase64s.length > 0) {
-        const filesContainer = document.createElement("div");
-        filesContainer.className = "files-container";
-
-        // 直接遍历原始的 fileBase64s 数组
-        fileBase64s.forEach(file => { // <--- 使用 fileBase64s 而不是 sortedFiles
-            const mimeType = file.mimeType || file.type; // 注意: sendMessage 中用的是 mimeType，这里统一一下
-            fileUI(filesContainer, file, mimeType);
-        });
-
-        userMessageElement.appendChild(filesContainer);
-    }
 
     conversationContainer.appendChild(userMessageElement);
     return conversationContainer;
@@ -2335,136 +2334,50 @@ window.addEventListener("beforeunload", function () {
     }, 0);
 });
 
-async function fetchFontAndConvertToBase64(fontURL) {
-    try {
-        const response = await fetch(fontURL);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const blob = await response.blob();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64Data = reader.result;
-                // IMPORTANT: Log the result to confirm it's valid.
-                console.log("Font loaded and converted:", base64Data.substring(0, 50) + "..."); // Log first 50 chars
-                resolve(base64Data);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (error) {
-        console.error("Error fetching or converting font:", error);
-        return null; // Return null on error
-    }
-}
-
-async function exportToPDF() {
-    const pdf = new window.jspdf.jsPDF('p', 'pt', 'a4');
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 40;
-    let y = margin;
-
-    // 加载自定义字体
-    const fontURL = '/templates/NotoSansSC-Regular.ttf';
-    const base64FontData = await fetchFontAndConvertToBase64(fontURL);
-    if (!base64FontData) {
-        console.error("Failed to fetch or convert font.");
-        alert('Failed to load font. Please try again.');
-        return;
-    }
-    const base64FontString = base64FontData.split(',')[1];
-    pdf.addFileToVFS('NotoSansSC-Regular.ttf', base64FontString);
-    pdf.addFont('NotoSansSC-Regular.ttf', 'NotoSansSC', 'normal');
-    pdf.setFont('NotoSansSC');
-
-    // 设置基础样式
-    const lineHeight = 15; // 每行高度
-    pdf.setFontSize(12);
-
-    const chatContainer = document.getElementById("chat-container");
-    const titleElement = document.getElementById("conversation-title");
-
-    if (!chatContainer || !titleElement) {
-        alert('HTML elements not found.');
+async function exportToMd() {
+    const id = getSessionId();
+    const resp = await fetch(`/share/${id}`, {method: 'POST'});
+    if (!resp.ok) {
+        console.error('导出失败', resp.statusText);
         return;
     }
 
-    // 获取标题用于文件名，但不显示在 PDF 内容中
-    const title = titleElement.textContent.trim().normalize('NFKC');
+    // 1. 读取为 Blob
+    const blob = await resp.blob();
+    // 2. 生成本地对象 URL
+    const url = URL.createObjectURL(blob);
 
-    // 计算当前页剩余行数
-    function getRemainingLines() {
-        return Math.floor((pageHeight - margin - y) / lineHeight);
-    }
+    // 3. 从头部解析文件名
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    let filename = 'chat_transcript.md';
 
-    // 绘制文本并处理分页
-    function drawTextWithPagination(lines, textColor) {
-        let remainingLines = getRemainingLines();
-
-        // 如果当前页没有足够空间，换页
-        if (remainingLines <= 0) {
-            pdf.addPage();
-            y = margin; // 移除标题后，直接从 margin 开始
-            remainingLines = getRemainingLines();
+    // 优先匹配 filename*=UTF-8''xxx
+    let match = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+    if (match) {
+        try {
+            filename = decodeURIComponent(match[1]);
+        } catch (e) {
+            console.warn('filename* 解码失败，使用原始值', match[1]);
+            filename = match[1];
         }
-
-        // 截取当前页能显示的行数
-        const linesToDraw = lines.slice(0, remainingLines);
-        const remainingTextLines = lines.slice(remainingLines);
-
-        // 绘制当前页的文本
-        pdf.setFontSize(12);
-        pdf.setTextColor(...textColor); // 解构 textColor 数组为单独参数
-        pdf.text(linesToDraw, margin, y);
-        y += linesToDraw.length * lineHeight;
-
-        // 如果还有剩余行，递归处理
-        if (remainingTextLines.length > 0) {
-            pdf.addPage();
-            y = margin; // 移除标题后，直接从 margin 开始
-            drawTextWithPagination(remainingTextLines, textColor);
+    } else {
+        // 回退去匹配 filename="..."
+        match = disposition.match(/filename\s*=\s*"([^"]+)"/i);
+        if (match) {
+            filename = match[1];
         }
     }
 
-    const conversations = chatContainer.getElementsByClassName("conversation");
+    // 4. 创建并点击下载链接
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 
-    for (const conv of conversations) {
-        // 用户消息
-        const userMsg = conv.querySelector(".user-message");
-        if (userMsg) {
-            const userText = userMsg.innerText.trim().normalize('NFKC');
-            const userLines = pdf.splitTextToSize(userText, pageWidth - 2 * margin);
-
-            // 绘制用户消息（蓝色）
-            drawTextWithPagination(userLines, [0, 0, 255]);
-            y += 5; // 用户消息后加 5pt 间距
-        }
-
-        // AI 回复
-        const aiMsg = conv.querySelector(".ai-message:not(.copy)") || conv.querySelector(".ai-message.copy");
-        if (aiMsg) {
-            const aiText = aiMsg.innerText.trim().normalize('NFKC');
-            const aiLines = pdf.splitTextToSize(aiText, pageWidth - 2 * margin);
-
-            // 绘制 AI 回复（绿色）
-            drawTextWithPagination(aiLines, [0, 128, 0]);
-            y += 10; // AI 回复后加 10pt 间距
-        }
-
-        // 对话之间的间距
-        y += 5;
-
-        // 如果接近页面底部，换页
-        if (y > pageHeight - margin - 30) {
-            pdf.addPage();
-            y = margin; // 移除标题后，直接从 margin 开始
-        }
-    }
-
-    // 使用标题作为文件名
-    pdf.save(`${title}.pdf`);
+    // 5. 释放资源
+    URL.revokeObjectURL(url);
 }
 
 function getFileIcon(mimeType) {

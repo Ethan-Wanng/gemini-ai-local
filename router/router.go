@@ -25,7 +25,23 @@ func Register() *http.ServeMux {
 	r.HandleFunc("PUT /edit-history/{sessionId}", handleEditHistoryTitle)
 	r.HandleFunc("GET /getTwoLastContent/{sessionId}", handleTwoLastContent)
 	r.HandleFunc("POST /stop", handleStop)
+	r.HandleFunc("POST /share/{sessionId}", handleShare)
 	return r
+}
+
+func handleShare(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("sessionId"))
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to parse request", http.StatusBadRequest)
+		return
+	}
+	err = domain.Share(configuration.DB, int64(id), w)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to parse request", http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleStop(w http.ResponseWriter, r *http.Request) {
