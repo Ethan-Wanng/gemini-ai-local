@@ -780,14 +780,22 @@ func GetTwoLastContent(db *sql.DB, sessionID int64) (*int64, *int64, error) {
 /*
 	{DateTime}
 	User :
+	![inline image](data:image/png;base64,xxx)
+
+	```
 	{Input}
+	```
 
 	AI :
 	{Output}
 
 	{DateTime}
 	User :
+	![inline image](data:image/png;base64,xxx)
+
+	```
 	{Input}
+	```
 
 	AI :
 	{Output}
@@ -808,14 +816,12 @@ func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 		return err
 	}
 	rawTitle := session.Title
-	// 最终要下载的文件名
 	filename := rawTitle + ".md"
 
-	// 设置 Content-Disposition，包含 filename 和 filename*
 	disposition := fmt.Sprintf(
 		"attachment; filename=\"%s\"; filename*=UTF-8''%s",
 		filename,
-		url.PathEscape(filename), // URL-encode UTF-8 字符串
+		url.PathEscape(filename),
 	)
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Content-Disposition", disposition)
@@ -828,23 +834,17 @@ func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 		} else {
 			ts = time.Now()
 		}
-		fmt.Fprintf(w, "**%s**  \n", ts.Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(w, "**<font color=\"lightblue\">%s</font>**  \n\n", ts.Format("2006-01-02 15:04:05"))
 
 		// 角色
 		label := "AI"
 		if c.Role == "user" {
-			label = "用户"
+			label = "User"
 		}
-		fmt.Fprintf(w, "**%s**：\n", label)
+		fmt.Fprintf(w, "## **%s**：\n\n<br/>\n\n", label)
 
-		// 聚合 parts
+		// 先插入所有文件（图片/音频/视频/其他）
 		for _, p := range c.Parts {
-			// 文本
-			if p.Text != "" {
-				// 每行末尾两个空格保留换行
-				fmt.Fprint(w, strings.ReplaceAll(p.Text, "\n", "  \n"))
-			}
-			// 内联二进制
 			if p.InlineData != nil && len(p.InlineData.Data) > 0 {
 				mime := p.InlineData.MimeType
 				b64 := base64.StdEncoding.EncodeToString(p.InlineData.Data)
@@ -853,27 +853,24 @@ func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 				switch {
 				case strings.HasPrefix(mime, "image/"):
 					// Markdown 图片
-					fmt.Fprintf(w, "\n\n![inline image](%s)\n\n", dataURI)
-
+					fmt.Fprintf(w, "![inline image](%s)\n\n", dataURI)
 				case strings.HasPrefix(mime, "video/"):
 					// HTML5 Video
 					fmt.Fprintf(w,
-						"\n\n<video controls width=\"480\">\n"+
+						"<video controls width=\"480\">\n"+
 							"  <source src=\"%s\" type=\"%s\" />\n"+
 							"  Your browser does not support the video tag.\n"+
 							"</video>\n\n",
 						dataURI, mime)
-
 				case strings.HasPrefix(mime, "audio/"):
 					// HTML5 Audio
 					fmt.Fprintf(w,
-						"\n\n<audio controls>\n"+
+						"<audio controls>\n"+
 							"  <source src=\"%s\" type=\"%s\" />\n"+
 							"  Your browser does not support the audio element.\n"+
 							"</audio>\n\n",
 						dataURI, mime)
 				default:
-					// 1) 确保有 ContentID
 					cid := int64(0)
 					if c.ContentID != nil {
 						cid = *c.ContentID
@@ -881,17 +878,44 @@ func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 					ext := ""
 					_, ok := configuration.CustomMIMEs[mime]
 					if !ok {
-						// fallback
 						ext = ".bin"
 					}
-
 					filename := fmt.Sprintf("%d%s", cid, ext)
-					fmt.Fprintf(w, "\n\n[%s 下载](%s)\n\n", filename, dataURI)
+					fmt.Fprintf(w, "[%s 下载](%s)\n\n", filename, dataURI)
 				}
 			}
 		}
-		// 段落分隔
-		fmt.Fprint(w, "\n")
+
+		// 如果是用户，并且有文字，则用代码块包起来
+		if c.Role == "user" {
+			// 有文字才加代码块
+			hasText := false
+			for _, p := range c.Parts {
+				if p.Text != "" {
+					hasText = true
+					break
+				}
+			}
+			if hasText {
+				fmt.Fprint(w, "```\n")
+				for _, p := range c.Parts {
+					if p.Text != "" {
+						fmt.Fprint(w, strings.ReplaceAll(p.Text, "\n", "  \n"))
+					}
+				}
+				fmt.Fprint(w, "\n```\n")
+			}
+		} else {
+			// AI 的文字，直接输出
+			for _, p := range c.Parts {
+				if p.Text != "" {
+					fmt.Fprint(w, strings.ReplaceAll(p.Text, "\n", "  \n"))
+				}
+			}
+		}
+
+		// 每轮对话结束后，留空行
+		fmt.Fprint(w, "\n\n<br/>\n\n")
 	}
 	return nil
 }
