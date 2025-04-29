@@ -609,10 +609,12 @@ async function sendMessage(isReply) {
         // 再次确保调整高度
         setTimeout(adjustChatContainerHeight, 200);
         // 变回提交按钮
-        setTimeout(() => {
-            saveButton.innerHTML = `<i class="fas fa-paper-plane"></i>`;
-            isStopped = false;
-        }, 100);
+        saveButton.innerHTML = `<i class="fas fa-paper-plane"></i>`;
+        isStopped = false;
+
+        if (!isReply && selectedModel === "gemini-2.0-flash-exp") {
+            await loadHistoryById(getSessionId(), "");
+        }
     }
 }
 

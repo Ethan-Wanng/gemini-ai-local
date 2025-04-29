@@ -777,29 +777,6 @@ func GetTwoLastContent(db *sql.DB, sessionID int64) (*int64, *int64, error) {
 	return &ids[1], &ids[0], nil
 }
 
-/*
-	{DateTime}
-	User :
-	![inline image](data:image/png;base64,xxx)
-
-	```
-	{Input}
-	```
-
-	AI :
-	{Output}
-
-	{DateTime}
-	User :
-	![inline image](data:image/png;base64,xxx)
-
-	```
-	{Input}
-	```
-
-	AI :
-	{Output}
-*/
 // Share 将指定 session 的对话以 Markdown 格式打包下载
 func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 	history, err := FindHistoryBySessionID(db, sessionID, false)
@@ -827,21 +804,12 @@ func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 	w.Header().Set("Content-Disposition", disposition)
 
 	for _, c := range history.Contents {
-		// 时间戳
-		var ts time.Time
-		if c.ContentID != nil {
-			ts = time.Unix(*c.ContentID/1000, (*c.ContentID%1000)*1e6)
-		} else {
-			ts = time.Now()
-		}
-		fmt.Fprintf(w, "**<font color=\"lightblue\">%s</font>**  \n\n", ts.Format("2006-01-02 15:04:05"))
-
 		// 角色
 		label := "AI"
 		if c.Role == "user" {
 			label = "User"
 		}
-		fmt.Fprintf(w, "## **%s**：\n\n<br/>\n\n", label)
+		fmt.Fprintf(w, "## **%s**：\n\n\n\n", label)
 
 		// 先插入所有文件（图片/音频/视频/其他）
 		for _, p := range c.Parts {
@@ -897,13 +865,16 @@ func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 				}
 			}
 			if hasText {
-				fmt.Fprint(w, "```\n")
 				for _, p := range c.Parts {
 					if p.Text != "" {
-						fmt.Fprint(w, strings.ReplaceAll(p.Text, "\n", "  \n"))
+						// 逐行加 "> "
+						lines := strings.Split(p.Text, "\n")
+						for _, line := range lines {
+							fmt.Fprintf(w, "> %s\n", line)
+						}
 					}
 				}
-				fmt.Fprint(w, "\n```\n")
+				fmt.Fprint(w, "\n\n")
 			}
 		} else {
 			// AI 的文字，直接输出
@@ -915,7 +886,7 @@ func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 		}
 
 		// 每轮对话结束后，留空行
-		fmt.Fprint(w, "\n\n<br/>\n\n")
+		fmt.Fprint(w, "\n\n\n\n")
 	}
 	return nil
 }
