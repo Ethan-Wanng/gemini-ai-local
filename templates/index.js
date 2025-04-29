@@ -178,9 +178,20 @@ function handlePaste(event) {
 
     // 1. 处理文件
     if (clipboardData.files && clipboardData.files.length > 0) {
-        handleFiles(clipboardData.files);
-        // 让 fileInput.files 跟随
-        if (fileInput) fileInput.files = clipboardData.files;
+        // 创建新的 FileList 对象，包含现有文件和新粘贴的文件
+        const existingFiles = uploadedFiles || [];
+        const newFiles = Array.from(clipboardData.files);
+        uploadedFiles = [...existingFiles, ...newFiles];
+
+        // 更新文件显示
+        handleFiles(uploadedFiles);
+
+        // 更新 fileInput（如果存在）
+        if (fileInput) {
+            const dt = new DataTransfer();
+            uploadedFiles.forEach(file => dt.items.add(file));
+            fileInput.files = dt.files;
+        }
     }
 
     // 2. 处理文本（如果有）
@@ -652,7 +663,7 @@ function createConversationContainer(userMessage, fileBase64s = []) {
 
     // Add copy userMessage button
     const copyButton = document.createElement("button");
-    copyButton.className = "copy-message-btn";
+    copyButton.className = "modern-copy-button";
     copyButton.innerHTML = '<i class="fas fa-copy"></i>';
     copyButton.onclick = () => copyMessage(userMessageElement, userMessage, fileBase64s);
     editButtonDiv.appendChild(copyButton);
@@ -1265,8 +1276,6 @@ async function handleNewSession(userMessage, sessionId) {
         while (Array.from(title).length < 40) {
             title += ' ';
         }
-        document.getElementById("conversation-title").textContent = title || "AI Chat";
-        document.getElementById("conversation-title").style.whiteSpace = "nowrap";
     } catch (titleError) {
         console.error("解析标题失败:", titleError);
     }
@@ -1517,33 +1526,83 @@ function addActionButtons(aiMessageElement, messageText) {
     const copyContent = document.createElement("button");
     copyContent.className = "copy-content-btn";
     copyContent.innerHTML = '<i class="fas fa-copy"></i>';
-    copyContent.onclick = function (e) {
+    copyContent.onclick = async function (e) {
         e.preventDefault();
         e.stopPropagation();
 
-        // 复制AI回复内容到剪贴板
-        navigator.clipboard.writeText(messageText)
-            .then(() => {
-                // 临时改变按钮文本表示复制成功
+        // 检查Clipboard API和ClipboardItem支持
+        if (navigator.clipboard && window.ClipboardItem) {
+            try {
+                // 复制为纯文本和Markdown（如果需要可扩展为HTML）
+                const clipboardItemsData = {
+                    'text/plain': new Blob([messageText], {type: 'text/plain'})
+                };
+
+                // 获取所有文件数据(图片、视频、音频等)
+                const fileContainers = aiMessageElement.querySelectorAll('.file-container');
+                if (fileContainers && fileContainers.length > 0) {
+                    for (const container of fileContainers) {
+                        const mediaElement = container.querySelector('img, video, audio');
+                        if (mediaElement) {
+                            const src = mediaElement.src;
+                            if (src.startsWith('data:')) {
+                                const mimeType = src.match(/^data:(.*?);/)[1];
+                                const base64Data = src.split(',')[1];
+                                const blob = base64ToBlob(base64Data, mimeType);
+                                clipboardItemsData[mimeType] = blob;
+                            }
+                        } else {
+                            const fileLink = container.querySelector('a');
+                            if (fileLink && fileLink.href.startsWith('data:')) {
+                                const mimeType = fileLink.href.split(';')[0].split(':')[1];
+                                const base64Data = fileLink.href.split(',')[1];
+                                const blob = base64ToBlob(base64Data, mimeType);
+                                clipboardItemsData[mimeType] = blob;
+                            }
+                        }
+                    }
+                }
+
+                const clipboardItem = new ClipboardItem(clipboardItemsData);
+                await navigator.clipboard.write([clipboardItem]);
                 const originalText = copyContent.innerHTML;
                 copyContent.innerHTML = '<i class="fas fa-check"></i> 已复制';
                 copyContent.style.backgroundColor = "rgba(76, 175, 80, 0.2)";
                 copyContent.style.color = "#4CAF50";
-
-                // 2秒后恢复原始文本
                 setTimeout(() => {
                     copyContent.innerHTML = originalText;
                     copyContent.style.backgroundColor = "";
                     copyContent.style.color = "";
                 }, 2000);
-            })
-            .catch(err => {
+            } catch (err) {
                 console.error('复制失败: ', err);
                 copyContent.innerHTML = '<i class="fas fa-times"></i> 复制失败';
                 setTimeout(() => {
-                    copyContent.innerHTML = '<i class="fas fa-copy"></i> 复制内容';
+                    copyContent.innerHTML = '<i class="fas fa-copy"></i>';
                 }, 2000);
-            });
+            }
+        } else {
+            // 降级方案:仅复制文本
+            navigator.clipboard.writeText(messageText)
+                .then(() => {
+                    const originalText = copyContent.innerHTML;
+                    copyContent.innerHTML = '<i class="fas fa-check"></i> 已复制(仅文字)';
+                    copyContent.style.backgroundColor = "rgba(76, 175, 80, 0.2)";
+                    copyContent.style.color = "#4CAF50";
+                    setTimeout(() => {
+                        copyContent.innerHTML = originalText;
+                        copyContent.style.backgroundColor = "";
+                        copyContent.style.color = "";
+                    }, 2000);
+                })
+                .catch(err => {
+                    console.error('复制失败: ', err);
+                    copyContent.innerHTML = '<i class="fas fa-times"></i> 复制失败';
+                    setTimeout(() => {
+                        copyContent.innerHTML = '<i class="fas fa-copy"></i>';
+                    }, 2000);
+                });
+        }
     };
 
     // 将按钮添加到容器中
@@ -1688,7 +1747,7 @@ async function updateChatUI(id, historyData) {
 
                     // Add copy userMessage button
                     const copyUserMessageButton = document.createElement("button");
-                    copyUserMessageButton.className = "copy-message-btn";
+                    copyUserMessageButton.className = "modern-copy-button";
                     copyUserMessageButton.innerHTML = '<i class="fas fa-copy"></i>';
                     editButtonDiv.appendChild(copyUserMessageButton);
                     // 收集所有的 inlineData
@@ -1721,7 +1780,11 @@ async function updateChatUI(id, historyData) {
             let aiText = "";
             content.parts.forEach(part => {
                 if (part.text) {
-                    messageElement.innerHTML += marked.parse(part.text);
+                    const parsedText = marked.parse(part.text);
+                    const textWrapper = document.createElement("div");
+                    textWrapper.innerHTML = parsedText;
+                    messageElement.appendChild(textWrapper);
+
                     aiMessageElementOnCopy.textContent += part.text;
                     aiText += part.text;
                 }
@@ -1732,6 +1795,7 @@ async function updateChatUI(id, historyData) {
                     messageElement.appendChild(container);
                 }
             });
+
 
             // 手动执行代码高亮
             const codeBlocks = messageElement.querySelectorAll('pre code');
@@ -2065,10 +2129,6 @@ async function loadHistoryById(id, title) {
             while (Array.from(title).length < 40) {
                 title += ' ';
             }
-
-            // 设置当前对话标题
-            document.getElementById("conversation-title").textContent = title || "AI Chat";
-            document.getElementById("conversation-title").style.whiteSpace = "nowrap";
         }
 
         // 更新聊天界面
@@ -2259,7 +2319,6 @@ function startNewConversation() {
     // 清空聊天区域内容
     const chatContainer = document.getElementById("chat-container");
     chatContainer.innerHTML = "";
-    document.getElementById("conversation-title").textContent = "AI Chat";
 
     // Remove active class from history item (if any)
     const historyList = document.getElementById("history-list");
