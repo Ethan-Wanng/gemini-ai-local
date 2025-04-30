@@ -1283,6 +1283,7 @@ async function handleNewSession(userMessage, sessionId) {
         while (Array.from(title).length < 40) {
             title += ' ';
         }
+        document.title = title
     } catch (titleError) {
         console.error("解析标题失败:", titleError);
     }
@@ -1365,17 +1366,8 @@ function enableCodeCopy() {
     document.querySelectorAll("pre").forEach((codeBlock) => {
         // 创建复制按钮
         const copyButton = document.createElement("button");
-        copyButton.textContent = "复制";
-        copyButton.style.position = "absolute";
-        copyButton.style.right = "10px";
-        copyButton.style.top = "10px";
-        copyButton.style.zIndex = "10";
-        copyButton.style.padding = "5px";
-        copyButton.style.backgroundColor = "#007BFF";
-        copyButton.style.color = "white";
-        copyButton.style.border = "none";
-        copyButton.style.borderRadius = "3px";
-        copyButton.style.cursor = "pointer";
+        copyButton.className = "modern-copy-button";
+        copyButton.innerHTML = '<i class="fas fa-copy"></i>';
 
         // 设置代码块的父容器为相对定位
         const codeContainer = document.createElement("div");
@@ -2151,6 +2143,7 @@ async function loadHistoryById(id, title) {
             if (title !== "") {
                 setupScrollListener(document.getElementById("chat-container"));
                 scrollToBottom(document.getElementById("chat-container"));
+                document.title = title
             }
         }, 200);
     } catch (error) {
@@ -2452,7 +2445,7 @@ function getFileIcon(mimeType) {
         return 'far fa-file-powerpoint';
     } else if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed' || mimeType === 'application/x-rar-compressed' || mimeType === 'application/x-7z-compressed' || mimeType === 'application/gzip' || mimeType === 'application/x-tar') { // **扩展: 更多压缩格式**
         return 'far fa-file-archive';
-    } else if (mimeType === 'text/plain' || mimeType === 'text/rtf' || mimeType.includes('markdown') || mimeType === 'text/md') { // **新增: RTF, Markdown 并与 Plain Text 合并**
+    } else if (mimeType === 'text/plain' || mimeType === 'text/rtf' || mimeType.includes('markdown') || mimeType === 'text/md') {
         return 'far fa-file-alt';
     } else if (
         mimeType === 'text/html' ||
