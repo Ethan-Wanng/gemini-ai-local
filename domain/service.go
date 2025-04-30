@@ -796,11 +796,11 @@ func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 	filename := rawTitle + ".md"
 
 	disposition := fmt.Sprintf(
-		"attachment; filename=\"%s\"; filename*=UTF-8''%s",
-		filename,
+		"attachment; filename*=UTF-8''%s",
 		url.PathEscape(filename),
 	)
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Disposition", disposition)
 
 	for _, c := range history.Contents {
@@ -846,10 +846,19 @@ func Share(db *sql.DB, sessionID int64, w http.ResponseWriter) error {
 					ext := ""
 					_, ok := configuration.CustomMIMEs[mime]
 					if !ok {
-						ext = ".bin"
+						ext = ".txt" // 统一作为文本预览
 					}
 					filename := fmt.Sprintf("%d%s", cid, ext)
-					fmt.Fprintf(w, "[%s 下载](%s)\n\n", filename, dataURI)
+
+					// 显示文本预览和下载链接
+					fmt.Fprintf(w,
+						"<details>\n"+
+							"  <summary>%s 预览 & 下载</summary>\n\n"+
+							"  <pre style=\"max-height: 240px; overflow: auto; background: #f5f5f5; padding: 8px; border-radius: 4px;\">\n%s\n</pre>\n"+
+							"  <a href=\"%s\" download=\"%s\">点击下载</a>\n"+
+							"</details>\n\n",
+						filename, string(p.InlineData.Data), dataURI, filename)
+
 				}
 			}
 		}

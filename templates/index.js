@@ -506,14 +506,11 @@ async function sendMessage(isReply) {
                     const result = reader.result;
                     const match = result.match(/^data:([^;]+);/);
                     const mimeType = match ? match[1] : files[i].type;
+                    console.log("----", mimeType)
                     const mediaTypes = ['image/', 'video/', 'audio/'];
                     const isMediaFile = mediaTypes.some(type => mimeType.startsWith(type));
                     const isSupportedFile = getFileIcon(mimeType) !== "far fa-file";
                     // Check if video file is not supported for certain models
-                    if (mimeType.startsWith('video/') && selectedModel === 'gemini-2.0-flash-thinking-exp') {
-                        alert("当前模型不支持视频文件输入。");
-                        return;
-                    }
                     if (!isMediaFile && !isSupportedFile) {
                         alert("不支持上传此类型文件。");
                         return;
@@ -2339,6 +2336,7 @@ function startNewConversation() {
     }
 
     chatContainer.style.display = "none";
+    document.title = "AI Chat"
     console.log("Conversation reset successfully.");
 }
 
