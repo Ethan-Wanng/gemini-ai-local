@@ -164,11 +164,58 @@ header {
     color: var(--text-color);
     background-color: var(--bg-color);
     transition: all 0.2s ease;
-    box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2);
+    box-shadow: 0 0 0 3px rgba(91, 134, 229, 0.3);
 }
 
 #user-input:focus {
     outline: none;
+    border-color: var(--button-bg-color);
+}
+
+#new-conversation-button {
+    background-color: transparent;
+    color: var(--header-text-color);
+    border: none;
+    border-radius: 50%;
+    width: 44px; /* 减小尺寸 */
+    height: 44px; /* 减小尺寸 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem; /* 减小图标大小 */
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: 8px; /* 减少间距 */
+}
+
+/* 修改浅色模式下的新对话按钮样式 */
+#new-conversation-button {
+    background-color: rgba(91, 134, 229, 0.2); /* 浅蓝色背景 */
+}
+
+#new-conversation-button:hover {
+    background-color: rgba(91, 134, 229, 0.3); /* 浅蓝色悬停背景 */
+    transform: translateY(-1px);
+}
+
+/* 文件选择按钮美化 */
+#select-file-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px; /* 减小尺寸 */
+    height: 44px; /* 减小尺寸 */
+    border-radius: 8px;
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    font-size: 1.2rem; /* 减小图标 */
+    color: var(--button-bg-color);
+    transition: all 0.2s ease;
+}
+
+#select-file-label:hover {
+    background-color: var(--history-hover-bg-color);
     border-color: var(--button-bg-color);
 }
 
@@ -189,6 +236,15 @@ header {
     background-color: var(--button-hover-bg-color);
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 发送按钮动画效果 */
+#send-button i {
+    transition: transform 0.3s ease;
+}
+
+#send-button:active i {
+    transform: translateX(5px) scale(0.9);
 }
 
 /* 修改 #history-container 默认样式 */
@@ -303,17 +359,6 @@ li.active {
     margin-left: 8px; /* 减少间距 */
 }
 
-/* 修改浅色模式下的新对话按钮样式 */
-#new-conversation-button {
-    background-color: rgba(108, 92, 231, 0.2);
-    color: var(--button-bg-color);
-}
-
-#new-conversation-button:hover {
-    background-color: rgba(108, 92, 231, 0.3);
-    transform: translateY(-1px);
-}
-
 #theme-toggle:hover, #share:hover {
     background-color: rgba(255, 255, 255, 0.2);
     transform: translateY(-1px);
@@ -410,27 +455,6 @@ pre code {
 
 pre:hover .copy-btn {
     opacity: 1;
-}
-
-/* 文件选择按钮美化 */
-#select-file-label {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px; /* 减小尺寸 */
-    height: 44px; /* 减小尺寸 */
-    border-radius: 8px;
-    background-color: var(--bg-color);
-    border: 1px solid var(--border-color);
-    cursor: pointer;
-    font-size: 1.2rem; /* 减小图标 */
-    color: var(--button-bg-color);
-    transition: all 0.2s ease;
-}
-
-#select-file-label:hover {
-    background-color: var(--history-hover-bg-color);
-    border-color: var(--button-bg-color);
 }
 
 /* 文件信息容器美化 */
@@ -876,15 +900,6 @@ pre code.hljs {
         transform: scale(1);
         opacity: 1;
     }
-}
-
-/* 发送按钮动画效果 */
-#send-button i {
-    transition: transform 0.3s ease;
-}
-
-#send-button:active i {
-    transform: translateX(5px) scale(0.9);
 }
 
 /* 文件上传提示 */

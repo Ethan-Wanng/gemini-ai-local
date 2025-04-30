@@ -1133,6 +1133,13 @@ function updateMessage(messageElement, newText, newFiles) {
     editButtonDiv.appendChild(editButton);
     editButton.onclick = () => editMessage(messageElement, newText, newFiles);
 
+    // Add copy userMessage button
+    const copyButton = document.createElement("button");
+    copyButton.className = "modern-copy-button";
+    copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+    copyButton.onclick = () => copyMessage(messageElement, newText, newFiles);
+    editButtonDiv.appendChild(copyButton);
+
     messageWrapper.appendChild(textDiv);
     messageWrapper.appendChild(editButtonDiv);
     messageElement.appendChild(messageWrapper);
@@ -1677,8 +1684,7 @@ function adjustTextareaHeight(textarea) {
 
     // 如果文本为空，重置为默认高度
     if (!textContent) {
-        textareaElement.style.height = '';
-        textareaElement.style.height = '40px';
+        textareaElement.style.height = '44px';
         textareaElement.style.overflowY = 'hidden';
         return;
     }
