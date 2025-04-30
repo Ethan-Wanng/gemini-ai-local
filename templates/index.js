@@ -2187,50 +2187,6 @@ function updateHistoryList(historyData) {
             const li = document.createElement("li");
             li.dataset.sessionId = item.session_id;
 
-            // 省略号按钮（...）
-            const moreButton = document.createElement("button");
-            moreButton.innerHTML = "..."; // 使用三个点表示
-            moreButton.className = "history-item-more-btn";
-            moreButton.style.marginRight = "10px"; // 按钮与标题之间的间距
-            moreButton.addEventListener("click", (event) => {
-                event.stopPropagation();
-
-                const menu = document.createElement("div");
-                menu.className = "history-item-menu";
-                menu.style.position = "absolute";
-                menu.style.backgroundColor = "var(--history-hover-bg-color)";
-                menu.style.border = "1px solid #ccc";
-                menu.style.padding = "10px";
-                menu.style.zIndex = "1000";
-                menu.style.top = `${event.clientY}px`;
-                menu.style.left = `${event.clientX}px`;
-
-                const editOption = document.createElement("div");
-                editOption.textContent = "编辑";
-                editOption.className = "history-menu-item edit-option";  // 添加 class
-                editOption.addEventListener("click", () => {
-                    editHistory(item.session_id);
-                    menu.remove(); // 关闭菜单
-                });
-                menu.appendChild(editOption);
-
-                const deleteOption = document.createElement("div");
-                deleteOption.textContent = "删除";
-                deleteOption.className = "history-menu-item delete-option"; // 添加 class
-                deleteOption.addEventListener("click", () => {
-                    deleteHistory(item.session_id);
-                    menu.remove(); // 关闭菜单
-                });
-                menu.appendChild(deleteOption);
-
-                document.body.appendChild(menu);
-
-                document.addEventListener("click", () => {
-                    menu.remove();
-                }, {once: true});
-            });
-            li.appendChild(moreButton);
-
             // 显示标题或"无消息"，并固定长度为40个字符
             const titleSpan = document.createElement("span");
             while (Array.from(item.title.replace(/\n/g, "")).length < 40) {
@@ -2240,9 +2196,34 @@ function updateHistoryList(historyData) {
             titleSpan.style.whiteSpace = "nowrap";
             li.appendChild(titleSpan);
 
+            const actionSpan = document.createElement("span")
+            actionSpan.className = "history-actions";
+            const editButton = document.createElement("button");
+            editButton.innerHTML = '<i class="fas fa-pencil-alt"></i>';
+
+            editButton.className = "history-action-btn history-edit-btn";
+            editButton.title = "编辑";
+            editButton.addEventListener("click", (event) => {
+                event.stopPropagation();
+                console.log("Edit clicked for:", item.session_id);
+                editHistory(item.session_id);
+            });
+            const deleteButton = document.createElement("button");
+            deleteButton.innerHTML = '<i class="fas fa-trash-alt"></i>';
+
+            deleteButton.className = "history-action-btn history-delete-btn";
+            deleteButton.title = "删除";
+            deleteButton.addEventListener("click", (event) => {
+                event.stopPropagation();
+                console.log("Delete clicked for:", item.session_id);
+                deleteHistory(item.session_id);
+            });
+            actionSpan.appendChild(editButton)
+            actionSpan.appendChild(deleteButton);
+            li.appendChild(actionSpan);
+
             // 点击列表项加载历史记录
             li.addEventListener("click", (event) => {
-                if (event.target === moreButton) return;
                 loadHistoryById(item.session_id, item.title.toString());
             });
 

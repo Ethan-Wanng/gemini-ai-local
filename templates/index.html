@@ -20,15 +20,15 @@
 <header>
     <div id="model-selector">
         <select id="model-select" onchange="changeModel()">
-            <option selected value="gemini-2.0-flash">Gemini 2.0 Flash (默认)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 flash</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-            <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (图片)</option>
-            <option value="gemini-exp-1206">Gemini Experimental 1206</option>
-            <option value="gemini-2.0-pro">Gemini 2.0 Pro</option>
-            <option value="gemini-2.0-flash-thinking-exp">Gemini 2.0 Flash (推理)</option>
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+            <option selected value="gemini-2.0-flash">gemini 2.0 flash (默认)</option>
+            <option value="gemini-2.5-flash">gemini 2.5 flash</option>
+            <option value="gemini-2.5-pro">gemini 2.5 pro</option>
+            <option value="gemini-2.0-flash-exp">gemini 2.0 flash (图片)</option>
+            <option value="gemini-exp-1206">gemini Experimental 1206</option>
+            <option value="gemini-2.0-pro">gemini 2.0 pro</option>
+            <option value="gemini-2.0-flash-thinking-exp">gemini 2.0 flash (推理)</option>
+            <option value="gemini-1.5-pro">gemini 1.5 pro</option>
+            <option value="gemini-1.5-flash">gemini 1.5 flash</option>
         </select>
         <button id="share" onclick="exportToMd()" title="分享">
             <i class="fas fa-share-from-square"></i>
@@ -59,7 +59,7 @@
                       oninput="adjustTextareaHeight()"
                       onpaste="handlePaste(event)"
                       placeholder="在这里输入您的问题或粘贴文件内容..."
-                      style="height: 44px"></textarea>
+            ></textarea>
             <button id="send-button" onclick="sendMessage(false)">
                 <i class="fas fa-paper-plane"></i>
             </button>
@@ -75,7 +75,6 @@
 
     <!-- 右侧历史记录容器 -->
     <div id="history-container">
-        <h3>历史记录</h3>
         <ul id="history-list"></ul>
     </div>
 </div>

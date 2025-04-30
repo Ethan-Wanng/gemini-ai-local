@@ -3,16 +3,18 @@
     --text-color: #333333; /* 深灰色文字，更清晰 */
     --header-bg-color: #4a6572; /* 稳重的灰蓝色标题 */
     --header-text-color: black;
-    --message-bg-color: #eef2f5; /* 用户消息的浅灰色 */
-    --ai-message-bg-color: #ffffff; /* AI消息白色背景 */
+    --message-bg-color: #ffffff; /* AI消息白色背景 */
     --button-bg-color: #4a6572; /* 与标题颜色匹配的按钮颜色 */
     --button-text-color: white;
     --button-hover-bg-color: #344955; /* 深色hover效果 */
     --border-color: #d0d7de; /* 较深的边框颜色 */
     --shadow-color: rgba(0, 0, 0, 0.1);
     --code-bg-color: #f0f3f5;
-    --history-hover-bg-color: #e1e5ea;
     --primary-text-color: #333;
+
+    --message-max-width: 80%; /* Default max width for messages */
+    --border-color-light: #eee; /* Lighter border color */
+    --bg-secondary-color: #f9f9f9; /* Slightly different background */
 }
 
 /* 全局盒模型设置 */
@@ -86,18 +88,13 @@ header {
 #chat-container {
     display: block;
     flex: 1;
-    /*margin: 0 0 10px 0;*/
     background: var(--bg-color);
-    /*border: 1px solid var(--border-color);*/
-    /*border-radius: 10px;*/
     border-style: none;
-    /*box-shadow: 0 4px 15px var(--shadow-color);*/
     padding: 12px;
     overflow-y: auto;
     transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
     margin-bottom: 20px;
-    /* 不在这里设置固定高度，我们会在JS中动态计算 */
-    min-height: 70%; /* 设置最小高度，防止过小 */
+    min-height: 70%;
 }
 
 .message {
@@ -125,7 +122,7 @@ header {
 }
 
 .ai-message {
-    background-color: var(--ai-message-bg-color);
+    background-color: var(--message-bg-color);
     text-align: left;
     margin-bottom: 50px;
     margin-right: auto;
@@ -138,33 +135,32 @@ header {
 }
 
 #input-container {
-    display: flex;
-    gap: 10px;
-    align-items: flex-end;
+    display: flex; /* Use Flexbox for layout */
+    gap: 10px; /* Space between flex items */
+    align-items: flex-end; /* Align items to the bottom */
     padding: 15px 20px;
     background-color: var(--bg-color);
-    border-top: none; /* 移除顶部边框 */
+    border-top: none;
     position: relative;
     margin-top: 10px;
-    /*margin-bottom: 0; !* 确保没有底部外边距 *!*/
 }
 
 #user-input {
-    flex: 1;
-    padding: 10px 12px; /* 减少padding */
+    flex: 1; /* Allow the textarea to grow and take available space */
+    padding: 10px 12px;
     font-size: 1rem;
-    border: 1px;
+    border: 1px solid var(--border-color); /* Use border-color variable */
     border-radius: 8px;
     resize: none;
     overflow-y: hidden;
     white-space: pre-wrap;
     line-height: 1.5em;
-    min-height: 1.5em;
-    max-height: calc(8 * 1.5em); /* 增加最大高度到约200px */
+    min-height: calc(1.5em + 20px); /* Match button height + padding */
+    max-height: calc(8 * 1.5em);
     color: var(--text-color);
-    background-color: var(--bg-color);
+    background-color: var(--bg-color); /* Use a specific input bg or fallback */
     transition: all 0.2s ease;
-    box-shadow: 0 0 0 3px rgba(91, 134, 229, 0.3);
+    height: calc(1.5em + 20px); /* Match button height + padding */
 }
 
 #user-input:focus {
@@ -176,66 +172,59 @@ header {
     background-color: transparent;
     color: var(--header-text-color);
     border: none;
-    border-radius: 50%;
-    width: 44px; /* 减小尺寸 */
-    height: 44px; /* 减小尺寸 */
+    border-radius: 8px; /* Changed to match others */
+    width: 44px;
+    height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem; /* 减小图标大小 */
+    font-size: 1rem;
     cursor: pointer;
     transition: all 0.2s ease;
-    margin-left: 8px; /* 减少间距 */
-}
-
-/* 修改浅色模式下的新对话按钮样式 */
-#new-conversation-button {
-    background-color: rgba(91, 134, 229, 0.2); /* 浅蓝色背景 */
+    margin-left: 0; /* Remove specific margin if using gap */
+    flex-shrink: 0; /* Prevent button from shrinking */
 }
 
 #new-conversation-button:hover {
-    background-color: rgba(91, 134, 229, 0.3); /* 浅蓝色悬停背景 */
     transform: translateY(-1px);
 }
 
-/* 文件选择按钮美化 */
 #select-file-label {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px; /* 减小尺寸 */
-    height: 44px; /* 减小尺寸 */
+    width: 44px;
+    height: 44px;
     border-radius: 8px;
-    background-color: var(--bg-color);
-    border: 1px solid var(--border-color);
+    background-color: transparent;
+    border: none;
     cursor: pointer;
-    font-size: 1.2rem; /* 减小图标 */
-    color: var(--button-bg-color);
+    font-size: 1.2rem;
+    color: var(--header-text-color);
     transition: all 0.2s ease;
+    flex-shrink: 0; /* Prevent button from shrinking */
 }
 
 #select-file-label:hover {
-    background-color: var(--history-hover-bg-color);
-    border-color: var(--button-bg-color);
+    transform: translateY(-1px);
 }
 
 #send-button {
-    padding: 10px 16px; /* 减少padding */
-    font-size: 0.95rem; /* 减小字体 */
-    background-color: var(--button-bg-color);
-    color: var(--button-text-color);
+    padding: 10px 16px;
+    font-size: 0.95rem;
+    background-color: transparent;
+    color: var(--header-text-color);
     border: none;
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s ease;
-    height: 44px; /* 减小高度 */
+    height: 44px;
     font-weight: 500;
+    flex-shrink: 0;
 }
 
 #send-button:hover {
-    background-color: var(--button-hover-bg-color);
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* 发送按钮动画效果 */
@@ -245,6 +234,15 @@ header {
 
 #send-button:active i {
     transform: translateX(5px) scale(0.9);
+}
+
+/* Hidden file input */
+#file-input {
+    display: none;
+}
+
+#fileInfo {
+    display: none;
 }
 
 /* 修改 #history-container 默认样式 */
@@ -270,40 +268,36 @@ body.history-visible #history-container {
     display: block;
 }
 
-/* 调整历史记录切换按钮的位置 */
 #history-toggle-btn {
-    position: relative; /* 相对定位 */
+    position: relative;
 }
 
 body.history-visible #history-container {
-    width: 350px; /* 恢复宽度 */
-    opacity: 1; /* 恢复不透明 */
-    padding: 10px; /* 恢复内边距 */
+    width: 350px;
+    opacity: 1;
+    padding: 10px;
 }
 
 #history-toggle-btn:hover {
-    background-color: rgba(255, 255, 255, 0.2);
     transform: translateY(-1px);
 }
 
-/* （可选）指示按钮活动状态 */
 body.history-visible #history-toggle-btn {
-    background-color: rgba(255, 255, 255, 0.15);
 }
 
 #history-container h3 {
     margin-top: 0;
-    padding-bottom: 8px; /* 减少底部padding */
+    padding-bottom: 8px;
     border-bottom: 2px solid var(--button-bg-color);
     color: var(--button-bg-color);
-    font-size: 1.1rem; /* 减小字体大小 */
+    font-size: 1.1rem;
     font-weight: 600;
 }
 
 body.history-visible #history-container h3 {
     visibility: visible;
     opacity: 1;
-    transition-delay: 0s; /* 立即显示 */
+    transition-delay: 0s;
 }
 
 #history-list {
@@ -324,43 +318,67 @@ body.history-visible #history-list {
 }
 
 #history-list li {
-    padding: 10px 12px; /* 减少内边距 */
-    margin: 8px 0; /* 减少上下margin */
+    padding: 10px 12px;
+    margin: 8px 0;
     cursor: pointer;
-    border-radius: 6px; /* 减小圆角 */
+    border-radius: 6px;
     transition: all 0.2s ease;
     border: 1px solid transparent;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 #history-list li:hover {
-    background-color: var(--history-hover-bg-color);
+    background-color: var(--bg-color);
     border-color: var(--border-color);
 }
 
+.history-actions {
+    display: flex;
+    gap: 4px; /* space between buttons */
+}
+
 li.active {
-    background-color: rgba(116, 162, 242, 0.1) !important; /* 浅蓝色背景 */
+    background-color: rgba(116, 162, 242, 0.1) !important;
     border-left: 3px solid var(--button-bg-color) !important;
     font-weight: 500;
 }
 
-#theme-toggle, #share, #new-conversation-button, #history-toggle-btn {
+.history-action-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    padding: 4px; /* Adjust padding */
+    cursor: pointer;
+    color: var(--header-text-color); /* Subtler color */
+    font-size: 0.9em; /* Slightly smaller icon/text */
+    border-radius: 4px;
+    line-height: 1; /* Ensure icon fits well */
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.history-action-btn:hover {
+    transform: translateY(-1px);
+}
+
+#theme-toggle, #share, #history-toggle-btn {
     background-color: transparent;
     color: var(--header-text-color);
     border: none;
     border-radius: 50%;
-    width: 44px; /* 减小尺寸 */
-    height: 44px; /* 减小尺寸 */
+    width: 44px;
+    height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem; /* 减小图标大小 */
+    font-size: 1rem;
     cursor: pointer;
     transition: all 0.2s ease;
-    margin-left: 8px; /* 减少间距 */
+    margin-left: 8px;
 }
 
 #theme-toggle:hover, #share:hover {
-    background-color: rgba(255, 255, 255, 0.2);
     transform: translateY(-1px);
 }
 
@@ -368,54 +386,49 @@ li.active {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 0 auto; /* This line centers it horizontally */
-    width: fit-content; /* Optional: Prevents the div from stretching too wide */
+    margin: 0 auto;
+    width: fit-content;
 }
 
 #model-select {
-    padding: 5px 10px; /* 减少padding */
+    padding: 5px 10px;
     border-radius: 6px;
     border: none;
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: var(--bg-color);
     color: var(--header-text-color);
-    font-size: 0.85rem; /* 减小字体大小 */
+    font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.2s ease;
-    max-width: 200px; /* 限制宽度 */
+    width: auto;
+    max-width: 200px;
 }
 
 #model-select:focus {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
 }
 
 #model-select option {
-    background-color: var(--header-bg-color);
-    color: white;
+    background-color: var(--bg-color);
+    color: var(--header-text-color);
 }
 
 .scroll-to-bottom-btn {
-    display: none; /* 初始隐藏，由 JS 控制显示 */
-    margin: 8px auto 5px auto; /* 上边距8px，左右自动（居中），下边距5px */
-    cursor: pointer; /* 确保有指针样式 */
-
-    /* --- 保留这些视觉样式 --- */
+    display: none;
+    margin: 8px auto 5px auto;
+    cursor: pointer;
     border-radius: 50%;
-    background-color: var(--button-bg-color);
-    color: white;
+    background-color: transparent;
+    color: var(--header-text-color);
     border: none;
     width: 36px;
     height: 36px;
-    align-items: center; /* 保留，用于图标居中 */
-    justify-content: center; /* 保留，用于图标居中 */
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    align-items: center;
+    justify-content: center;
     transition: all 0.3s ease;
 }
 
 .scroll-to-bottom-btn:hover {
-    /* 保留 hover 效果 */
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* 代码块样式改进 */
@@ -443,7 +456,7 @@ pre code {
     top: 5px;
     right: 5px;
     padding: 5px 10px;
-    background-color: rgba(0, 123, 255, 0.8);
+    background-color: transparent;
     color: white;
     border: none;
     border-radius: 4px;
@@ -547,12 +560,10 @@ tr:hover {
     background-color: rgba(108, 92, 231, 0.08);
 }
 
-/* Override hljs background */
 .hljs {
     background: transparent !important;
 }
 
-/* Override code block background */
 pre code.hljs {
     background: transparent !important;
 }
@@ -603,20 +614,20 @@ pre code.hljs {
     --bg-color: #1a1a1a;
     --text-color: #cbd5e1;
     --header-bg-color: #334155;
-    --message-bg-color: #334155;
-    --ai-message-bg-color: #1e293b;
+    --message-bg-color: #1e293b;
     --button-bg-color: #64748b;
     --button-hover-bg-color: #475569;
     --border-color: #475569;
     --shadow-color: rgba(0, 0, 0, 0.5);
     --code-bg-color: #293341;
-    --history-hover-bg-color: #253040;
-    --secondary-text-color: #999999; /* 深色模式下的次要文字颜色 */
-    --hover-bg-color: rgba(255, 255, 255, 0.05); /* 深色模式悬停背景 */
+    --secondary-text-color: #999999;
+    --hover-bg-color: rgba(255, 255, 255, 0.05);
     --error-color: #ff4c4c;
     --scroll-thumb-color: #444;
     --scroll-track-color: #222;
     --header-text-color: white;
+    --border-color-light: #666;
+    --bg-secondary-color: #333;
 }
 
 /* 深色模式下的背景 */
@@ -630,20 +641,10 @@ pre code.hljs {
     border: 1px solid #404040;
 }
 
-.dark-theme #history-container h3 {
-    color: #74a2f2; /* 浅蓝色 */
-    border-bottom-color: #74a2f2; /* 浅蓝色 */
-}
-
 /* 深色模式下的历史记录项 */
 .dark-theme #history-list li {
     color: #e0e0e0;
     border-color: transparent;
-}
-
-.dark-theme #history-list li:hover {
-    background-color: rgba(116, 162, 242, 0.15); /* 悬停时更柔和的浅蓝色 */
-    border-color: #404040;
 }
 
 /* 深色模式下的活跃历史记录项 */
@@ -712,6 +713,7 @@ pre code.hljs {
 }
 
 .edit-container {
+    background-color: transparent;
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -719,7 +721,6 @@ pre code.hljs {
 }
 
 .edit-textarea {
-    background-color: var(--bg-color);
     color: var(--text-color);
     border: 1px solid var(--border-color);
     border-radius: 5px;
@@ -766,26 +767,23 @@ pre code.hljs {
     margin-top: 10px;
 }
 
-/* Add this to your main CSS file */
 .edit-container-sized {
-    max-width: var(--message-max-width, 80%); /* Use your message max-width variable or a fixed value like 700px */
-    width: 100%; /* Ensure it tries to fill the available width up to max-width */
-    box-sizing: border-box; /* Include padding/border in the element's total width/height */
-    /* Inherit or set other relevant styles like padding, border-radius if needed */
+    max-width: var(--message-max-width);
+    width: 100%;
+    box-sizing: border-box;
     padding: 10px;
-    border-radius: 8px; /* Example-color)); /* Match message background */
+    border-radius: 8px;
     border: 1px solid var(--border-color);
-    margin-bottom: 10px; /* Spacing below the edit box */
+    margin-bottom: 10px;
 }
 
-/* Style for individual file previews within the edit area */
 .edit-file-preview-item {
-    position: relative; /* Needed for absolute positioning of the delete button */
+    position: relative;
     margin-bottom: 8px;
     padding: 5px;
-    border: 1px solid var(--border-color-light, #eee); /* Lighter border for previews */
+    border: 1px solid var(--border-color-light);
     border-radius: 4px;
-    background-color: var(--bg-secondary-color, #f9f9f9); /* Slightly different background */
+    background-color: var(--bg-secondary-color);
 }
 
 .edit-file-delete-btn {
@@ -1023,7 +1021,8 @@ pre code.hljs {
 
 /* 深色模式下的用户消息 */
 .dark-theme .user-message {
-    background-color: #475569; /* 使用灰蓝色 */
+    background-color: #2a2a2a;
+    border-color: #404040;
     color: #e0e0e0;
 }
 
@@ -1032,18 +1031,6 @@ pre code.hljs {
     background-color: #2a2a2a;
     border-color: #404040;
     color: #e0e0e0;
-}
-
-/* 深色模式下的文件上传按钮 */
-.dark-theme #select-file-label {
-    background-color: #2a2a2a;
-    border-color: #404040;
-    color: #74a2f2; /* 使用更柔和的浅蓝 */
-}
-
-.dark-theme #select-file-label:hover {
-    background-color: #333333;
-    border-color: #74a2f2; /* 使用更柔和的浅蓝 */
 }
 
 /* 深色模式下的加载指示器 */
@@ -1127,16 +1114,6 @@ pre code.hljs {
 .dark-theme .error-message {
     background-color: rgba(255, 76, 76, 0.15);
     border-color: #ff4c4c;
-}
-
-/* 深色模式下的新对话按钮 */
-.dark-theme #new-conversation-button {
-    background-color: rgba(116, 162, 242, 0.3); /* 浅蓝色 */
-    color: #cbd5e1; /* 浅灰色 */
-}
-
-.dark-theme #new-conversation-button:hover {
-    background-color: rgba(116, 162, 242, 0.4); /* 悬停时更亮的浅蓝色 */
 }
 
 /* 深色模式下表格样式 */
