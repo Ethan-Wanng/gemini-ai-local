@@ -132,11 +132,9 @@ func GetSessionTitle(input configuration.UserInput) (*Title, error) {
 	runes := []rune(input.Message)
 
 	// 根据消息长度决定标题
-	if len(runes) < 14 {
-		title.Text = input.Message
-	} else {
+	if len(runes) == 0 || len(runes) >= 14 {
 		// 请求AI生成标题
-		input.Message = input.Message + "\n，请根据这段文字帮我起一个标题，不超过26个字符，直接给出一个，不要添加任何信息，后面不要加换行"
+		input.Message = input.Message + "\n，请根据这些文字或者文件帮我起一个标题，不超过26个字符，直接给出一个，不要添加任何信息，后面不要加换行"
 
 		var str *string
 		for range 3 {
@@ -150,6 +148,8 @@ func GetSessionTitle(input configuration.UserInput) (*Title, error) {
 		if str == nil {
 			title.Text = string(runes[:min(14, len(runes))])
 		}
+	} else {
+		title.Text = input.Message
 	}
 
 	// 更新数据库中的标题
@@ -451,7 +451,7 @@ func PostRequestOnClient(input configuration.UserInput) (*http.Response, error) 
 	}
 
 	request, err := http.NewRequest("POST",
-		configuration.BuildAIApi("gemini-1.5-flash", configuration.EnvMap["CONTENT_TYPE_JSON"]),
+		configuration.BuildAIApi("gemini-2.0-flash", configuration.EnvMap["CONTENT_TYPE_JSON"]),
 		bytes.NewBuffer(body))
 
 	if err != nil {

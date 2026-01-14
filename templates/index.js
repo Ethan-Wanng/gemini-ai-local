@@ -167,6 +167,12 @@ function changeModel() {
             // Revert to previous selection
             modelSelect.value = selectedModel;
         });
+
+    // 最後在頁面的最底部顯示模型的名稱
+    const modelNameDisplay = document.getElementById("model-name-display");
+    if (modelNameDisplay) {
+        modelNameDisplay.textContent = selectedModel;
+    }
 }
 
 let uploadedFiles = [];
@@ -474,7 +480,7 @@ async function sendMessage(isReply) {
         adjustChatContainerHeight();
     }
 
-    if (!userMessage) {
+    if (!userMessage && (!fileInput || fileInput.files.length === 0)) {
         return;
     }
 
@@ -534,6 +540,11 @@ async function sendMessage(isReply) {
         uploadedFilesInfo.innerHTML = ""
         uploadedFilesInfo.style.display = "none"; // Hide the file info container
     }
+
+    // --- 修复开始: 这里添加清空全局变量的代码 ---
+    uploadedFiles = [];
+    // --- 修复结束 ---
+
     // Create and show AI message container immediately
     const {aiConversationContainer, aiMessageElement, aiMessageElementOnCopy} = createAIMessageElements(chatContainer);
     aiMessageElement.textContent = "AI is thinking...";
@@ -588,7 +599,7 @@ async function sendMessage(isReply) {
         await handleChatResponse(chatResponse, aiMessageElement, aiMessageElementOnCopy, chatContainer, userMessage);
 
         if (flag) {
-            await handleNewSession(userMessage, sessionId);
+            await handleNewSession(userMessage, sessionId, fileBase64s);
         }
 
         await updateHistoryListFromServer();
@@ -608,6 +619,9 @@ async function sendMessage(isReply) {
         handleError(conversationContainer, error);
     } finally {
         fileInput.value = ""
+
+        // --- 额外保险: 在finally中也确保清空全局数组 ---
+        uploadedFiles = [];
 
         // 再次确保输入框高度重置
         inputField.style.height = ''; // 清空内联样式高度
@@ -776,7 +790,7 @@ async function copyMessage(userMessageElement, userMessage, fileBase64s) {
 // 统一的按钮反馈函数
 function showCopyFeedback(userMessageElement, success) {
     // 查找复制按钮
-    const copyBtn = userMessageElement.querySelector('.copy-message-btn');
+    const copyBtn = userMessageElement.querySelector('.modern-copy-button');
     if (!copyBtn) return;
     const originalText = copyBtn.innerHTML;
     if (success) {
@@ -795,15 +809,7 @@ function showCopyFeedback(userMessageElement, success) {
     }, 1000);
 }
 
-/**
- * Replaces a user message element with an editing interface, including clickable media/document previews.
- *
- * @param {HTMLElement} messageElement The user message div to replace.
- * @param {string} originalText The original text content of the message.
- * @param {Array<{data: string, mimeType: string}>} originalFilesData Array of original file objects.
- */
 async function editMessage(messageElement, originalText, originalFilesData = []) {
-    // ... (editContainer, textarea, filesPreviewContainer setup - no changes) ...
     const editContainer = document.createElement("div");
     editContainer.className = "edit-container";
     editContainer.style.border = "1px solid var(--border-color)";
@@ -951,9 +957,8 @@ async function editMessage(messageElement, originalText, originalFilesData = [])
 
         fileInfo.appendChild(detailsDiv);
 
-        // Remove Button (no changes)
         const removeBtn = document.createElement("button");
-        // ... removeBtn setup ...
+
         removeBtn.innerHTML = '<i class="fas fa-times"></i>';
         removeBtn.title = "移除文件";
         removeBtn.className = "edit-file-remove-btn";
@@ -1222,6 +1227,7 @@ async function handleChatResponse(chatResponse, aiMessageElement, aiMessageEleme
                 scrollToBottom(chatContainer);
             }
         }
+        aiMessageElement.innerHTML = marked.parse(wrapAsCodeIfNeeded(partialResponse));
     } catch (error) {
         if (error.name !== 'AbortError') {
             throw error;
@@ -1259,18 +1265,17 @@ function setupScrollListener(chatContainer) {
     });
 }
 
-async function handleNewSession(userMessage, sessionId) {
+async function handleNewSession(userMessage, sessionId, fileBase64s) {
     await setSessionID();
     sessionId = getSessionId();
     const titleResponse = await fetch("/generateTitle", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({message: userMessage, session_id: sessionId}),
+        body: JSON.stringify({message: userMessage, session_id: sessionId, files: fileBase64s}),
     });
 
     if (!titleResponse.ok) {
         console.error(`Title API error: ${titleResponse.status}`);
-        // Use first 40 characters of userMessage as title
         return;
     }
 
@@ -1775,7 +1780,8 @@ async function updateChatUI(id, historyData) {
             let aiText = "";
             content.parts.forEach(part => {
                 if (part.text) {
-                    const parsedText = marked.parse(part.text);
+                    // const parsedText = marked.parse(part.text);
+                    const parsedText = marked.parse(wrapAsCodeIfNeeded(part.text));
                     const textWrapper = document.createElement("div");
                     textWrapper.innerHTML = parsedText;
                     messageElement.appendChild(textWrapper);
@@ -1816,6 +1822,39 @@ async function updateChatUI(id, historyData) {
     // 调整聊天容器高度
     adjustChatContainerHeight();
 }
+
+function wrapAsCodeIfNeeded(input) {
+    // 1. 找开始标签
+    const startRe = /<!DOCTYPE\s+html>|<html\b/i;
+    const startMatch = startRe.exec(input);
+    if (!startMatch) {
+        // 没有发现 html 开头，直接返回原文
+        return input;
+    }
+
+    // 2. 找结束标签（取最后一个匹配）
+    const endRe = /<\/html>/gi;
+    let endMatch, lastEndIdx = -1;
+    while ((endMatch = endRe.exec(input)) !== null) {
+        lastEndIdx = endRe.lastIndex; // lastIndex 指向匹配末尾位置
+    }
+    if (lastEndIdx < 0) {
+        // 找不到关闭标签，直接返回原文
+        return input;
+    }
+
+    // 3. 切分字符串
+    const before = input.slice(0, startMatch.index);
+    const htmlBlock = input.slice(startMatch.index, lastEndIdx);
+    const after = input.slice(lastEndIdx);
+
+    // 4. 在 htmlBlock 前后插入代码块标记
+    const fenced = '```\n' + htmlBlock + '\n```';
+
+    // 5. 拼回去
+    return before + fenced + after;
+}
+
 
 function fileUI(container, fileData, mimeType) {
     if (!fileData || !fileData.data || !mimeType) {
@@ -2140,7 +2179,8 @@ async function loadHistoryById(id, title) {
             if (title !== "") {
                 setupScrollListener(document.getElementById("chat-container"));
                 scrollToBottom(document.getElementById("chat-container"));
-                document.title = title
+                document.title = title;
+                document.getElementById("title").innerText = title;
             }
         }, 200);
     } catch (error) {
@@ -2168,10 +2208,29 @@ function highlightActiveHistory(id) {
     }
 }
 
-function updateHistoryList(historyData) {
+function updateHistoryList(historyData, type) {
     const historyList = document.getElementById("history-list");
-    historyList.innerHTML = ""; // 清空列表
+    const listActions = document.getElementById("list-actions");
+    let title = document.getElementById("history-title")
 
+    if (!historyList || !title || !listActions) {
+        console.error("Missing required history UI elements! (history-list, history-title, or list-actions)");
+        return;
+    }
+
+    historyList.innerHTML = "";
+    listActions.innerHTML = "";
+    switch (type) {
+        case 0 :
+            title.innerText = "AI助手历史记录";
+            break;
+        case 1 :
+            title.innerText = "视频历史记录";
+            break;
+        case 2 :
+            title.innerText = "小说历史记录";
+            break;
+    }
     if (historyData && Array.isArray(historyData)) {
         historyData.forEach(item => {
             const li = document.createElement("li");
@@ -2221,7 +2280,27 @@ function updateHistoryList(historyData) {
         });
     } else {
         const li = document.createElement("li");
-        li.textContent = "暂无历史记录";
+        if (type === 0) {
+            li.textContent = "暂无历史记录";
+        }
+
+        // 添加右侧的“加号”按钮 (仅针对视频和小说)
+        if (type === 1 || type === 2) {
+            const addButton = document.createElement("button");
+            addButton.innerHTML = '<i class="fas fa-plus"></i>';
+            addButton.className = "history-action-btn add-item-btn";
+            addButton.title = type === 1 ? "添加视频" : "添加小说";
+            addButton.addEventListener("click", (event) => {
+                event.stopPropagation();
+                if (type === 1) {
+                    showAddVideoModal(); // 实际的添加视频UI
+                } else {
+                    showAddReadModal(); // 实际的添加小说UI
+                }
+            });
+            listActions.appendChild(addButton);
+        }
+
         historyList.appendChild(li);
     }
 }
@@ -2464,4 +2543,34 @@ function getFileType(mimeType) {
     if (!mimeType) return 'bin';
     const parts = mimeType.split('/');
     return parts[1] ? parts[1].replace(/[^a-z0-9]/gi, '').toLowerCase() : 'bin';
+}
+
+function toggleDropdown() {
+    const dropdownList = document.querySelector('.dropdown-list');
+    const select = document.getElementById('model-select');
+    const selectRect = select.getBoundingClientRect();
+    const windowHeight = window.innerHeight;
+    const middleOfScreen = windowHeight / 2;
+
+    // 切換下拉菜單的顯示狀態
+    dropdownList.classList.toggle('active');
+
+    // 只有當下拉菜單處於激活狀態時才判斷方向
+    if (dropdownList.classList.contains('active')) {
+        // 檢查按鈕中心點是否在屏幕中線以下
+        if (selectRect.top + (selectRect.height / 2) > middleOfScreen) {
+            dropdownList.style.bottom = '100%';  // 向上展開
+            dropdownList.style.top = 'auto';
+        } else {
+            dropdownList.style.top = '100%';     // 向下展開
+            dropdownList.style.bottom = 'auto';
+        }
+    }
+}
+
+function selectOption(value) {
+    const select = document.getElementById('model-select');
+    select.value = value;
+    toggleDropdown(); // 關閉下拉框
+    changeModel(); // 觸發模型變化函數
 }

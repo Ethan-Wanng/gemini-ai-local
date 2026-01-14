@@ -26,6 +26,14 @@ func Register() *http.ServeMux {
 	r.HandleFunc("GET /getTwoLastContent/{sessionId}", handleTwoLastContent)
 	r.HandleFunc("POST /stop", handleStop)
 	r.HandleFunc("POST /share/{sessionId}", handleShare)
+	r.HandleFunc("GET /videoList", handleVideoList)
+	r.HandleFunc("GET /readList", handleReadList)
+	r.HandleFunc("GET /videoByFilename/{filename}", handleVideoByFilename)
+	r.HandleFunc("GET /readByFilename/{filename}", handleReadByFilename)
+	r.HandleFunc("POST /saveVideo", handleSaveVideo)
+	r.HandleFunc("POST /saveRead", handleSaveRead)
+	r.HandleFunc("DELETE /delVideo/{filename}", handleDelVideo)
+	r.HandleFunc("DELETE /delRead/{filename}", handleDelRead)
 	return r
 }
 
@@ -261,4 +269,201 @@ func handleIndex(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		return
 	}
+}
+
+// 定义一个合理的内存缓冲大小，例如 32MB
+const MaxMemoryBuffer = 32 << 20 // 32MB
+
+// ensureJSONResponse Helper function to set JSON header and encode response
+func ensureJSONResponse(w http.ResponseWriter, data interface{}, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// handleVideoList 列出所有视频（包括本地和YouTube收藏）
+func handleVideoList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	video := domain.Video{}
+	videos := video.ListAllVideos()
+	ensureJSONResponse(w, videos, http.StatusOK)
+}
+
+// handleReadList 列出所有小说
+func handleReadList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	read := domain.Read{}
+	reads := read.List()
+	ensureJSONResponse(w, reads, http.StatusOK)
+}
+
+// handleVideoByFilename 根据文件名查找并提供本地视频文件
+func handleVideoByFilename(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	filename := r.PathValue("filename")
+	if filename == "" {
+		http.Error(w, "Filename is required", http.StatusBadRequest)
+		return
+	}
+	video := domain.Video{}
+	foundVideo := video.FindLocal(filename)
+	if foundVideo == nil {
+		http.Error(w, "Video not found", http.StatusNotFound)
+		return
+	}
+	if foundVideo.Source == domain.SourceLocal {
+		http.ServeFile(w, r, foundVideo.VideoUrl)
+	} else {
+		http.Error(w, "This is a YouTube video, not a local file.", http.StatusBadRequest)
+	}
+}
+
+// handleReadByFilename 根据文件名查找并提供小说文件
+func handleReadByFilename(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	filename := r.PathValue("filename")
+	if filename == "" {
+		http.Error(w, "Filename is required", http.StatusBadRequest)
+		return
+	}
+	read := domain.Read{}
+	foundRead := read.Find(filename)
+	if foundRead == nil {
+		http.Error(w, "Read not found", http.StatusNotFound)
+		return
+	}
+	http.ServeFile(w, r, foundRead.ReadUrl)
+}
+
+// handleSaveVideo 处理视频文件上传
+func handleSaveVideo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 解析 multipart/form-data，使用 MaxMemoryBuffer 作为内存上限
+	err := r.ParseMultipartForm(MaxMemoryBuffer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to parse form: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get file from form: %v", err), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	targetFilename := fileHeader.Filename
+	if targetFilename == "" {
+		http.Error(w, "Filename is empty", http.StatusBadRequest)
+		return
+	}
+
+	video := domain.Video{}
+	saveErr := video.SaveLocal(file, targetFilename)
+	if saveErr != nil {
+		log.Printf("Error saving video file: %v", saveErr)
+		http.Error(w, "Failed to save video file: "+saveErr.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	ensureJSONResponse(w, map[string]string{"message": "Video uploaded and saved successfully", "filename": targetFilename}, http.StatusCreated)
+}
+
+// handleSaveRead 处理小说文件上传
+func handleSaveRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 解析 multipart/form-data，使用 MaxMemoryBuffer 作为内存上限
+	err := r.ParseMultipartForm(MaxMemoryBuffer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to parse form: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get file from form: %v", err), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	targetFilename := fileHeader.Filename
+	if targetFilename == "" {
+		http.Error(w, "Filename is empty", http.StatusBadRequest)
+		return
+	}
+
+	read := domain.Read{}
+	saveErr := read.Save(file, targetFilename)
+	if saveErr != nil {
+		log.Printf("Error saving read file: %v", saveErr)
+		http.Error(w, "Failed to save read file: "+saveErr.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	ensureJSONResponse(w, map[string]string{"message": "Read uploaded and saved successfully", "filename": targetFilename}, http.StatusCreated)
+}
+
+// handleDelVideo 删除本地视频文件
+func handleDelVideo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	filename := r.PathValue("filename")
+	if filename == "" {
+		http.Error(w, "Filename is required", http.StatusBadRequest)
+		return
+	}
+	video := domain.Video{}
+	err := video.RemoveLocal(filename)
+	if err != nil {
+		log.Printf("Error deleting video file %s: %v", filename, err)
+		http.Error(w, "Failed to delete video file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	ensureJSONResponse(w, map[string]string{"message": "Video deleted successfully", "filename": filename}, http.StatusOK)
+}
+
+// handleDelRead 删除小说文件
+func handleDelRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	filename := r.PathValue("filename")
+	if filename == "" {
+		http.Error(w, "Filename is required", http.StatusBadRequest)
+		return
+	}
+	read := domain.Read{}
+	err := read.Remove(filename)
+	if err != nil {
+		log.Printf("Error deleting read file %s: %v", filename, err)
+		http.Error(w, "Failed to delete read file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	ensureJSONResponse(w, map[string]string{"message": "Read deleted successfully", "filename": filename}, http.StatusOK)
 }

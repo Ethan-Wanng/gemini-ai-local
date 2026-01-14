@@ -13,7 +13,7 @@ import (
 
 type RequestBody struct {
 	Contents         []*Content `json:"contents"`
-	GenerationConfig any        `json:"generation_config"`
+	GenerationConfig any        `json:"generation_config,omitempty"`
 }
 
 type Part struct {
@@ -95,12 +95,12 @@ func (r *RequestBody) prepareRequestBody(input configuration.UserInput) ([]byte,
 
 // 发送请求并返回响应
 func (r *RequestBody) sendRequest(body []byte) (*http.Response, error) {
-	//var prettyJSON bytes.Buffer
-	//if err := json.Indent(&prettyJSON, body, "", "    "); err != nil {
-	//	log.Printf("Failed to format request body: %v", err)
-	//} else {
-	//	log.Printf("Request body:\n%s", prettyJSON.String())
-	//}
+	var prettyJSON bytes.Buffer
+	if err := json.Indent(&prettyJSON, body, "", "    "); err != nil {
+		log.Printf("Failed to format request body: %v", err)
+	} else {
+		log.Printf("Request body:\n%s", prettyJSON.String())
+	}
 	req, err := http.NewRequest("POST", configuration.BuildAIApi(configuration.DefaultModelInt, ""), bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %v", err)
@@ -182,7 +182,8 @@ func (r *RequestBody) handleSSEResponse(w http.ResponseWriter, resp *http.Respon
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "data:") {
-				jsonData = strings.TrimSpace(line[5:]) // 注意这里是 5 而不是 6，因为冒号后面可能没有空格
+				jsonData = strings.TrimSpace(line[5:])
+				break
 			}
 		}
 

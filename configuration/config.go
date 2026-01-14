@@ -186,7 +186,8 @@ func InitHistoryDir() error {
                 inline_data_id INTEGER,
                 content_id INTEGER NOT NULL,
                 text TEXT NOT NULL,
-                create_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                create_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                model TEXT NOT NULL DEFAULT 'gemini-2.0-flash'
             );`,
 		},
 		{
@@ -228,8 +229,8 @@ func BuildAIApi(DefaultModel, ContentType string) string {
 		"gemini-2.0-flash-exp":          EnvMap["GEMINI_MODEL_2_EXP"],
 		"gemini-2.0-flash-thinking-exp": EnvMap["GEMINI_MODEL_2.0_Thinking"],
 		"gemini-2.5-pro":                EnvMap["GEMINI_MODEL_2.5_PRO"],
-		"gemeni-2.5-flash":              EnvMap["GEMINI_MODEL_2.5_FLASH"],
-		"gemini-2.0-pro":                EnvMap["GEMINI_MODEL_2.0_PRO"],
+		"gemini-2.5-flash":              EnvMap["GEMINI_MODEL_2.5_FLASH"],
+		"gemini-3.0-flash":              EnvMap["GEMINI_MODEL_3.0_FLASH"],
 		"gemini-exp-1206":               EnvMap["GEMINI_MODEL_1206"],
 	}
 
